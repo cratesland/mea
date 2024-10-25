@@ -14,12 +14,22 @@
 
 [package]
 name = "mea"
-
-description = "Async Rust utilities that are runtime agnostic."
-edition = "2021"
-license = "Apache-2.0"
-readme = "README.md"
-rust-version = "1.75.0"
 version = "0.0.1"
 
-[dependencies]
+edition = "2021"
+rust-version = "1.75.0"
+
+description = "Async Rust utilities that are runtime agnostic."
+documentation = "https://docs.rs/mea"
+homepage = "https://github.com/tisonkun/mea"
+license = "Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/tisonkun/mea"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dev-dependencies]
+pollster = { version = "0.3.0" }
+tokio = { version = "1.41.0", features = ["full"] }

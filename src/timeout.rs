@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod internal;
-
-pub mod timeout;
-pub mod waitgroup;
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub enum MaybeTimedOut<T> {
+    /// Action completed before timeout.
+    Completed,
+    /// Action timed out. `T` contains the asynchronous timer result.
+    TimedOut(T),
+}
