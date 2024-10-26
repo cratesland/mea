@@ -12,24 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::mem::take;
-use std::task::Waker;
-
-pub(crate) struct Mutex<T>(std::sync::Mutex<T>);
-
-impl<T> Mutex<T> {
-    #[must_use]
-    #[inline]
-    pub(crate) const fn new(t: T) -> Self {
-        Self(std::sync::Mutex::new(t))
-    }
-
-    pub(crate) fn lock(&self) -> std::sync::MutexGuard<'_, T> {
-        self.0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-    }
-}
+use crate::internal::Mutex;
+use core::mem::take;
+use core::task::Waker;
 
 pub(crate) struct Waiters {
     data: Vec<Waiter>,

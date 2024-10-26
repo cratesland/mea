@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::future::Future;
-use std::future::IntoFuture;
-use std::pin::Pin;
+use core::future::Future;
+use core::future::IntoFuture;
+use core::pin::Pin;
+use core::task::Context;
+use core::task::Poll;
 use std::sync::Arc;
 use std::sync::Weak;
-use std::task::Context;
-use std::task::Poll;
 
 use crate::internal::Mutex;
 use crate::internal::Waiters;
