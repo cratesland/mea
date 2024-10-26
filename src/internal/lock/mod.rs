@@ -19,23 +19,28 @@
 //! resources. All the guards are expected to release the resources as soon as updates are done, so
 //! that there is no need to worry about long blocking and never deadlocks.
 
-#[cfg(feature = "critical-section")]
-mod critical_section;
-#[cfg(feature = "critical-section")]
-pub(crate) use critical_section::Mutex;
+#[cfg(all(not(feature = "std"), feature = "sync-critical-section"))]
+mod impl_critical_section;
+#[cfg(all(not(feature = "std"), feature = "sync-critical-section"))]
+pub(crate) use impl_critical_section::Mutex;
+
+#[cfg(all(not(feature = "std"), feature = "sync-futex"))]
+mod impl_futex;
+#[cfg(all(not(feature = "std"), feature = "sync-futex"))]
+pub(crate) use impl_futex::Mutex;
 
 #[cfg(feature = "std")]
-#[cfg_attr(all(feature = "std", feature = "critical-section"), allow(dead_code))]
-mod std_mutex;
-#[cfg(all(not(feature = "critical-section"), feature = "std"))]
-pub(crate) use std_mutex::Mutex;
+mod impl_std;
+#[cfg(feature = "std")]
+pub(crate) use impl_std::Mutex;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::cell::UnsafeCell;
     use std::sync::Arc;
     use std::vec::Vec;
+
+    use super::*;
 
     #[test]
     fn test_lock() {

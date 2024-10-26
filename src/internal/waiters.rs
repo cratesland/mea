@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::internal::Mutex;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::mem::take;
 use core::task::Waker;
+
+use crate::internal::Mutex;
 
 // Wake-on-Drop waiters
 pub(crate) struct WoDWaiters {
@@ -38,8 +39,8 @@ impl WoDWaiters {
                 }
                 // SAFETY: The outer container should guarantee
                 //   1. The value of "id" is one returned by previous "upsert" call.
-                //   2. `wake_all` is called on drop, and no more `upsert` will be called
-                //      once the outer container is being dropped.
+                //   2. `wake_all` is called on drop, and no more `upsert` will be called once the
+                //      outer container is being dropped.
                 _ => unreachable!("[BUG] update non-existent waker"),
             },
             None => {
