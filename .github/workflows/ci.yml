@@ -35,7 +35,7 @@ concurrency:
 jobs:
   check:
     name: Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: korandoru/hawkeye@v5
@@ -54,10 +54,11 @@ jobs:
 
   test:
     name: Run tests
-    runs-on: ubuntu-latest
     strategy:
       matrix:
+        os: [ ubuntu-22.04, macos-14, windows-2022 ]
         rust-version: [ "1.75.0", "stable" ]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
@@ -72,7 +73,7 @@ jobs:
 
   required:
     name: Required
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: ${{ always() }}
     needs:
       - check
