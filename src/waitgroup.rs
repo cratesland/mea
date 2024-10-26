@@ -101,9 +101,11 @@ impl Future for WaitGroupFuture {
     }
 }
 
+#[pin_project::pin_project]
 pub struct WaitGroupTimeoutFuture<T> {
     id: Option<usize>,
     inner: Weak<Inner>,
+    #[pin]
     timer: T,
 }
 
@@ -111,20 +113,17 @@ impl<T: Future> Future for WaitGroupTimeoutFuture<T> {
     type Output = MaybeTimedOut<T::Output>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // SAFETY: `id` and `inner` are Unpin; `timer` must be pinned before poll.
-        let Self { id, inner, timer } = unsafe { self.get_unchecked_mut() };
-        let timer = unsafe { Pin::new_unchecked(timer) };
-
-        match inner.upgrade() {
-            Some(inner) => match timer.poll(cx) {
+        let this = self.project();
+        match this.inner.upgrade() {
+            Some(inner) => match this.timer.poll(cx) {
                 Poll::Ready(o) => {
                     let mut lock = inner.waiters.lock();
-                    lock.remove(id);
+                    lock.remove(this.id);
                     Poll::Ready(MaybeTimedOut::TimedOut(o))
                 }
                 Poll::Pending => {
                     let mut lock = inner.waiters.lock();
-                    lock.upsert(id, cx.waker());
+                    lock.upsert(this.id, cx.waker());
                     Poll::Pending
                 }
             },

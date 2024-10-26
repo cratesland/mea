@@ -30,6 +30,9 @@ repository = "https://github.com/tisonkun/mea"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[dependencies]
+pin-project = { version = "1.1.7" }
+
 [dev-dependencies]
 pollster = { version = "0.3.0" }
 tokio = { version = "1.41.0", features = ["full"] }
