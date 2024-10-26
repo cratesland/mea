@@ -12,7 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod internal;
+#![no_std]
 
-pub mod timeout;
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
+#[cfg(feature = "std")]
+extern crate std as alloc;
+
+mod internal;
 pub mod waitgroup;

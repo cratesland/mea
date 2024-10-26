@@ -13,9 +13,11 @@
 // limitations under the License.
 
 use crate::internal::Mutex;
+use alloc::vec::Vec;
 use core::mem::take;
 use core::task::Waker;
 
+/// A lightweight slab implementation.
 pub(crate) struct Waiters {
     data: Vec<Waiter>,
     next: usize,
@@ -62,6 +64,7 @@ impl Waiters {
         }
     }
 
+    #[allow(dead_code)] // no remove case so far
     pub(crate) fn remove(&mut self, id: &mut Option<usize>) {
         if let Some(key) = id.take() {
             if let Some(waiter) = self.data.get_mut(key) {

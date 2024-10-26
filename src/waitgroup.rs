@@ -12,17 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::sync::Arc;
+use alloc::sync::Weak;
 use core::future::Future;
 use core::future::IntoFuture;
 use core::pin::Pin;
 use core::task::Context;
 use core::task::Poll;
-use std::sync::Arc;
-use std::sync::Weak;
 
 use crate::internal::Mutex;
 use crate::internal::Waiters;
-use crate::timeout::MaybeTimedOut;
 
 #[derive(Clone)]
 pub struct WaitGroup {
@@ -35,18 +34,6 @@ impl WaitGroup {
             inner: Arc::new(Inner {
                 waiters: Mutex::new(Waiters::new()),
             }),
-        }
-    }
-
-    pub fn wait(self) -> WaitGroupFuture {
-        self.into_future()
-    }
-
-    pub fn wait_timeout<T>(self, timer: T) -> WaitGroupTimeoutFuture<T> {
-        WaitGroupTimeoutFuture {
-            id: None,
-            inner: Arc::downgrade(&self.inner),
-            timer,
         }
     }
 }
@@ -101,37 +88,6 @@ impl Future for WaitGroupFuture {
     }
 }
 
-#[pin_project::pin_project]
-pub struct WaitGroupTimeoutFuture<T> {
-    id: Option<usize>,
-    inner: Weak<Inner>,
-    #[pin]
-    timer: T,
-}
-
-impl<T: Future> Future for WaitGroupTimeoutFuture<T> {
-    type Output = MaybeTimedOut<T::Output>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
-        match this.inner.upgrade() {
-            Some(inner) => match this.timer.poll(cx) {
-                Poll::Ready(o) => {
-                    let mut lock = inner.waiters.lock();
-                    lock.remove(this.id);
-                    Poll::Ready(MaybeTimedOut::TimedOut(o))
-                }
-                Poll::Pending => {
-                    let mut lock = inner.waiters.lock();
-                    lock.upsert(this.id, cx.waker());
-                    Poll::Pending
-                }
-            },
-            None => Poll::Ready(MaybeTimedOut::Completed),
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
     use std::time::Duration;
@@ -179,10 +135,12 @@ mod test {
 
         let wg = WaitGroup::new();
         let _wg_clone = wg.clone();
-        let out = test_runtime.block_on(async move {
-            let timer = tokio::time::sleep(Duration::from_millis(50));
-            wg.wait_timeout(timer).await
+        let timeout = test_runtime.block_on(async move {
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_millis(50)) => true ,
+                _ = wg => false,
+            }
         });
-        assert_eq!(out, MaybeTimedOut::TimedOut(()));
+        assert!(timeout);
     }
 }
