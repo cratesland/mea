@@ -48,10 +48,7 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: typos-cli,taplo-cli,hawkeye
-      - name: Check lockfile and all linters
-        run: |
-          cargo x build --locked
-          cargo x lint
+      - run: cargo x lint
 
   test:
     name: Run tests
