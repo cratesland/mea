@@ -31,8 +31,11 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = []
+default = ["std"]
 std = []
+
+[dependencies]
+critical-section = { version = "1.2.0", optional = true }
 
 [dev-dependencies]
 pollster = { version = "0.3.0" }

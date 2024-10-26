@@ -13,80 +13,47 @@
 // limitations under the License.
 
 use crate::internal::Mutex;
+use alloc::vec;
 use alloc::vec::Vec;
 use core::mem::take;
 use core::task::Waker;
 
-/// A lightweight slab implementation.
-pub(crate) struct Waiters {
-    data: Vec<Waiter>,
-    next: usize,
+// Wake-on-Drop waiters
+pub(crate) struct WoDWaiters {
+    data: Vec<Waker>,
 }
 
-enum Waiter {
-    Occupied(Waker),
-    Vacant(usize),
-}
-
-impl Waiters {
+impl WoDWaiters {
     pub(crate) const fn new() -> Self {
-        Self {
-            data: Vec::new(),
-            next: 0,
-        }
+        Self { data: vec![] }
     }
 
     pub(crate) fn upsert(&mut self, id: &mut Option<usize>, waker: &Waker) {
         match *id {
             Some(key) => match self.data.get_mut(key) {
-                Some(Waiter::Occupied(w)) => {
+                Some(w) => {
                     if !w.will_wake(waker) {
                         *w = waker.clone()
                     }
                 }
-                _ => unreachable!("update non-existent waker"),
+                // SAFETY: The outer container should guarantee
+                //   1. The value of "id" is one returned by previous "upsert" call.
+                //   2. `wake_all` is called on drop, and no more `upsert` will be called
+                //      once the outer container is being dropped.
+                _ => unreachable!("[BUG] update non-existent waker"),
             },
             None => {
-                let key = self.next;
-
-                if self.data.len() == key {
-                    self.data.push(Waiter::Occupied(waker.clone()));
-                    self.next = key + 1;
-                } else if let Some(&Waiter::Vacant(n)) = self.data.get(key) {
-                    self.data[key] = Waiter::Occupied(waker.clone());
-                    self.next = n;
-                } else {
-                    unreachable!();
-                }
-
-                *id = Some(key);
+                self.data.push(waker.clone());
+                *id = Some(self.data.len());
             }
         }
     }
 
-    #[allow(dead_code)] // no remove case so far
-    pub(crate) fn remove(&mut self, id: &mut Option<usize>) {
-        if let Some(key) = id.take() {
-            if let Some(waiter) = self.data.get_mut(key) {
-                if let Waiter::Occupied(_) = waiter {
-                    *waiter = Waiter::Vacant(self.next);
-                    self.next = key;
-                }
-            }
-        }
-    }
-
+    // SAFETY: Always call this method when the outer container is being dropped.
     pub(crate) fn wake_all(mutex: &Mutex<Self>) {
-        let waiters = {
-            let mut lock = mutex.lock();
-            lock.next = 0;
-            take(&mut lock.data)
-        };
-
-        for waiter in waiters {
-            if let Waiter::Occupied(w) = waiter {
-                w.wake();
-            }
+        let waker_list = mutex.with(|lock| take(&mut lock.data));
+        for w in waker_list {
+            w.wake();
         }
     }
 }

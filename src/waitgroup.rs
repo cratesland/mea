@@ -21,7 +21,7 @@ use core::task::Context;
 use core::task::Poll;
 
 use crate::internal::Mutex;
-use crate::internal::Waiters;
+use crate::internal::WoDWaiters;
 
 #[derive(Clone)]
 pub struct WaitGroup {
@@ -32,7 +32,7 @@ impl WaitGroup {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(Inner {
-                waiters: Mutex::new(Waiters::new()),
+                waiters: Mutex::new(WoDWaiters::new()),
             }),
         }
     }
@@ -58,12 +58,12 @@ impl IntoFuture for WaitGroup {
 }
 
 struct Inner {
-    waiters: Mutex<Waiters>,
+    waiters: Mutex<WoDWaiters>,
 }
 
 impl Drop for Inner {
     fn drop(&mut self) {
-        Waiters::wake_all(&self.waiters);
+        WoDWaiters::wake_all(&self.waiters);
     }
 }
 
@@ -79,8 +79,9 @@ impl Future for WaitGroupFuture {
         let Self { id, inner } = self.get_mut();
         match inner.upgrade() {
             Some(inner) => {
-                let mut lock = inner.waiters.lock();
-                lock.upsert(id, cx.waker());
+                inner.waiters.with(|waiters| {
+                    waiters.upsert(id, cx.waker());
+                });
                 Poll::Pending
             }
             None => Poll::Ready(()),

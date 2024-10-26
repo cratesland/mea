@@ -12,41 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Mutex as StdMutex;
-use std::sync::MutexGuard as StdMutexGuard;
-use std::sync::PoisonError;
+use core::cell::RefCell;
 
-pub(crate) struct Mutex<T>(StdMutex<T>);
+pub(crate) struct Mutex<T>(critical_section::Mutex<RefCell<T>>);
 
 impl<T> Mutex<T> {
-    #[must_use]
     #[inline]
     pub(crate) const fn new(t: T) -> Self {
-        Self(StdMutex::new(t))
+        Self(critical_section::Mutex::new(RefCell::new(t)))
     }
 
-    pub(crate) fn lock(&self) -> StdMutexGuard<'_, T> {
-        self.0.lock().unwrap_or_else(PoisonError::into_inner)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::Arc;
-
-    #[test]
-    fn test_poison_mutex() {
-        let mutex = Arc::new(Mutex::new(()));
-
-        let m = mutex.clone();
-        let _ = std::thread::spawn(move || {
-            let _guard = m.lock();
-            panic!("poisoned");
+    pub(crate) fn with<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut T) -> R,
+    {
+        critical_section::with(|cs| {
+            let mut this = self
+                .0
+                .borrow(cs)
+                .try_borrow_mut()
+                // SAFETY: The outer with closure guarantees to borrow with token 'cs' exactly once.
+                .expect("[BUG] borrow the mutex multiple times");
+            f(&mut this)
         })
-        .join();
-
-        let guard = mutex.lock();
-        assert_eq!((), *guard);
     }
 }

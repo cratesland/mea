@@ -13,13 +13,13 @@
 // limitations under the License.
 
 #![no_std]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
-#[cfg(not(feature = "std"))]
+// NOTE: It is too painful to drop dynamic memory allocation support in no_std environment, at
+// least allocate memory for `Vec` is fundamental.
 extern crate alloc;
-#[cfg(feature = "std")]
+#[cfg(any(test, feature = "std"))]
 extern crate std;
-#[cfg(feature = "std")]
-extern crate std as alloc;
 
 mod internal;
 pub mod waitgroup;
