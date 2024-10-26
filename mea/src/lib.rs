@@ -22,4 +22,15 @@ extern crate alloc;
 extern crate std;
 
 mod internal;
+
+pub mod latch;
 pub mod waitgroup;
+
+#[cfg(test)]
+fn test_runtime() -> &'static tokio::runtime::Runtime {
+    use std::sync::OnceLock;
+
+    use tokio::runtime::Runtime;
+    static RT: OnceLock<Runtime> = OnceLock::new();
+    RT.get_or_init(|| Runtime::new().unwrap())
+}

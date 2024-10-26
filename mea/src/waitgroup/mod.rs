@@ -21,7 +21,10 @@ use core::task::Context;
 use core::task::Poll;
 
 use crate::internal::Mutex;
-use crate::internal::WoDWaiters;
+use crate::internal::WakeOnDropWaitSet;
+
+#[cfg(test)]
+mod tests;
 
 #[derive(Clone)]
 pub struct WaitGroup {
@@ -32,7 +35,7 @@ impl WaitGroup {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(Inner {
-                waiters: Mutex::new(WoDWaiters::new()),
+                waiters: Mutex::new(WakeOnDropWaitSet::new()),
             }),
         }
     }
@@ -58,15 +61,17 @@ impl IntoFuture for WaitGroup {
 }
 
 struct Inner {
-    waiters: Mutex<WoDWaiters>,
+    waiters: Mutex<WakeOnDropWaitSet>,
 }
 
 impl Drop for Inner {
     fn drop(&mut self) {
-        WoDWaiters::wake_all(&self.waiters);
+        WakeOnDropWaitSet::wake_all(&self.waiters);
     }
 }
 
+/// Future returned by [`WaitGroup::into_future`].
+#[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct WaitGroupFuture {
     id: Option<usize>,
     inner: Weak<Inner>,
@@ -86,62 +91,5 @@ impl Future for WaitGroupFuture {
             }
             None => Poll::Ready(()),
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use std::time::Duration;
-
-    use super::*;
-
-    fn test_runtime() -> tokio::runtime::Runtime {
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-    }
-
-    #[test]
-    fn test_wait_group_drop() {
-        let test_runtime = test_runtime();
-
-        let wg = WaitGroup::new();
-        for _i in 0..100 {
-            let w = wg.clone();
-            test_runtime.spawn(async move {
-                drop(w);
-            });
-        }
-        pollster::block_on(wg.into_future());
-    }
-
-    #[test]
-    fn test_wait_group_await() {
-        let test_runtime = test_runtime();
-
-        let wg = WaitGroup::new();
-        for _i in 0..100 {
-            let w = wg.clone();
-            test_runtime.spawn(async move {
-                w.await;
-            });
-        }
-        pollster::block_on(wg.into_future());
-    }
-
-    #[test]
-    fn test_wait_group_timeout() {
-        let test_runtime = test_runtime();
-
-        let wg = WaitGroup::new();
-        let _wg_clone = wg.clone();
-        let timeout = test_runtime.block_on(async move {
-            tokio::select! {
-                _ = tokio::time::sleep(Duration::from_millis(50)) => true ,
-                _ = wg => false,
-            }
-        });
-        assert!(timeout);
     }
 }

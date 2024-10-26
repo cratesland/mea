@@ -17,7 +17,6 @@ use core::cell::RefCell;
 pub(crate) struct Mutex<T>(critical_section::Mutex<RefCell<T>>);
 
 impl<T> Mutex<T> {
-    #[inline]
     pub(crate) const fn new(t: T) -> Self {
         Self(critical_section::Mutex::new(RefCell::new(t)))
     }

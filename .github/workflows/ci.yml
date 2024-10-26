@@ -38,8 +38,6 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - name: Delete rust-toolchain.toml
-        run: rm rust-toolchain.toml
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@nightly
         with:
@@ -48,7 +46,7 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: typos-cli,taplo-cli,hawkeye
-      - run: cargo x lint
+      - run: cargo +nightly x lint
 
   test:
     name: Run tests
