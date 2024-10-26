@@ -38,19 +38,15 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - uses: korandoru/hawkeye@v5
+      - name: Delete rust-toolchain.toml
+        run: rm rust-toolchain.toml
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with:
-          tool: typos-cli,taplo-cli
-      - name: Check Format
-        run: cargo fmt --all
-      - name: Check Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
-      - name: Check Toml
-        run: taplo format --check
-      - name: Check Typos
-        run: typos
+          tool: typos-cli,taplo-cli,hawkeye
+      - run: cargo x lint
 
   test:
     name: Run tests
@@ -68,8 +64,10 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust-version }}
+      - name: Build locked
+        run: cargo x build --locked
       - name: Run unit tests
-        run: cargo test --all-features -- --nocapture
+        run: cargo x test --nocapture
 
   required:
     name: Required

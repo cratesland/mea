@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// This implementation is derived from futex.rs in the std library.
+
 use core::cell::UnsafeCell;
 use core::hint;
+use core::marker::PhantomData;
 use core::ops::Deref;
 use core::ops::DerefMut;
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering;
-
-// This is derived from futex.rs in the std library.
 
 const UNLOCKED: u32 = 0; // unlocked
 const LOCKED: u32 = 1; // locked, no other threads waiting
@@ -62,7 +63,10 @@ impl<T> Mutex<T> {
             self.lock_contended()
         }
 
-        MutexGuard { lock: self }
+        MutexGuard {
+            lock: self,
+            marker: PhantomData,
+        }
     }
 
     #[cold]
@@ -133,9 +137,11 @@ impl<T> Mutex<T> {
 #[must_use = "if unused the Mutex will immediately unlock"]
 struct MutexGuard<'a, T> {
     lock: &'a Mutex<T>,
+    // HACK - impl<T> !Send for MutexGuard<'_, T> {}
+    // @see https://github.com/rust-lang/rust/issues/68318
+    marker: PhantomData<*const ()>,
 }
 
-impl<T> !Send for MutexGuard<'_, T> {}
 unsafe impl<T: Sync> Sync for MutexGuard<'_, T> {}
 
 impl<T> Deref for MutexGuard<'_, T> {
@@ -152,8 +158,8 @@ impl<T> DerefMut for MutexGuard<'_, T> {
     }
 }
 
-impl<T: ?Sized> Drop for MutexGuard<'_, T> {
+impl<T> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
-        unsafe { self.lock.unlock() }
+        self.lock.unlock();
     }
 }
