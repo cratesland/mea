@@ -11,26 +11,3 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-#![no_std]
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
-
-// NOTE: It is too painful to drop dynamic memory allocation support in no_std environment, at
-// least allocate memory for `Vec` is fundamental.
-extern crate alloc;
-#[cfg(any(test, feature = "std"))]
-extern crate std;
-
-mod internal;
-
-pub mod latch;
-pub mod waitgroup;
-
-#[cfg(test)]
-fn test_runtime() -> &'static tokio::runtime::Runtime {
-    use std::sync::OnceLock;
-
-    use tokio::runtime::Runtime;
-    static RT: OnceLock<Runtime> = OnceLock::new();
-    RT.get_or_init(|| Runtime::new().unwrap())
-}

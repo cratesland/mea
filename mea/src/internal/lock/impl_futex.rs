@@ -15,7 +15,6 @@
 // This implementation is derived from futex.rs in the std library.
 
 use core::cell::UnsafeCell;
-use core::hint;
 use core::marker::PhantomData;
 use core::ops::Deref;
 use core::ops::DerefMut;
@@ -69,7 +68,6 @@ impl<T> Mutex<T> {
         }
     }
 
-    #[cold]
     fn lock_contended(&self) {
         // Spin first to speed things up if the lock is released quickly.
         let mut state = self.spin();
@@ -118,7 +116,7 @@ impl<T> Mutex<T> {
                 return state;
             }
 
-            hint::spin_loop();
+            core::hint::spin_loop();
             spin -= 1;
         }
     }

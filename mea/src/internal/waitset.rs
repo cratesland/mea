@@ -20,11 +20,11 @@ use core::task::Waker;
 use crate::internal::Mutex;
 
 // Wake-on-Drop waiters
-pub(crate) struct WoDWaiters {
+pub(crate) struct WakeOnDropWaitSet {
     data: Vec<Waker>,
 }
 
-impl WoDWaiters {
+impl WakeOnDropWaitSet {
     pub(crate) const fn new() -> Self {
         Self { data: vec![] }
     }

@@ -15,5 +15,5 @@
 mod lock;
 pub(crate) use lock::*;
 
-mod waiters;
-pub(crate) use waiters::*;
+mod waitset;
+pub(crate) use waitset::*;

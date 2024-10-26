@@ -17,7 +17,6 @@ use std::sync::PoisonError;
 pub(crate) struct Mutex<T>(std::sync::Mutex<T>);
 
 impl<T> Mutex<T> {
-    #[inline]
     pub(crate) const fn new(t: T) -> Self {
         Self(std::sync::Mutex::new(t))
     }
