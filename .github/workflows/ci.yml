@@ -48,13 +48,16 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: typos-cli,taplo-cli,hawkeye
-      - run: cargo x lint
+      - name: Check lockfile and all linters
+        run: |
+          cargo x build --locked
+          cargo x lint
 
   test:
     name: Run tests
     strategy:
       matrix:
-        os: [ ubuntu-22.04, macos-14, windows-2019 ]
+        os: [ ubuntu-22.04, macos-14, windows-2022 ]
         rust-version: [ "1.75.0", "stable" ]
     runs-on: ${{ matrix.os }}
     steps:
@@ -66,9 +69,6 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust-version }}
-      - name: Build locked
-        run: cargo x build --locked
-        shell: bash
       - name: Run unit tests
         run: cargo x test --no-capture
         shell: bash
