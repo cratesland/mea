@@ -16,8 +16,10 @@
 name = "mea"
 version = "0.0.1"
 
+categories = ["asynchronous", "concurrency", "no-std"]
 description = "Async Rust utilities that are runtime agnostic."
 documentation = "https://docs.rs/mea"
+keywords = ["waitgroup", "asynchronous", "concurrency", "synchronization"]
 
 edition.workspace = true
 homepage.workspace = true
