@@ -68,8 +68,10 @@ jobs:
           toolchain: ${{ matrix.rust-version }}
       - name: Build locked
         run: cargo x build --locked
+        shell: bash
       - name: Run unit tests
         run: cargo x test --no-capture
+        shell: bash
 
   required:
     name: Required
