@@ -69,7 +69,7 @@ jobs:
       - name: Build locked
         run: cargo x build --locked
       - name: Run unit tests
-        run: cargo x test --nocapture
+        run: cargo x test --no-capture
 
   required:
     name: Required
