@@ -161,8 +161,7 @@ impl Latch {
     fn decrement(&self, n: usize) {
         let mut cnt = self.stat.load(Ordering::Relaxed);
         while cnt != 0 {
-            // avoid undefined behavior due to overflow
-            let new_cnt = if cnt < n { 0 } else { cnt - n };
+            let new_cnt = cnt.saturating_sub(n);
             match self.stat.compare_exchange_weak(
                 cnt,
                 new_cnt,
