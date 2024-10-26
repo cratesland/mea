@@ -14,7 +14,9 @@
 
 [package]
 name = "x"
-version = "0.1.0"
+version = "3.14159.26535"
+
+publish = false
 
 edition.workspace = true
 homepage.workspace = true
