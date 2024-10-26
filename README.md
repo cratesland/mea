@@ -13,8 +13,8 @@
 [docs-url]: https://docs.rs/mea
 [license-badge]: https://img.shields.io/crates/l/mea
 [license-url]: LICENSE
-[actions-badge]: https://github.com/tisonkun/mea/workflows/CI/badge.svg
-[actions-url]:https://github.com/tisonkun/mea/actions?query=workflow%3ACI
+[actions-badge]: https://github.com/tisonkun/mea/actions/workflows/ci.yml/badge.svg
+[actions-url]: https://github.com/tisonkun/mea/actions/workflows/ci.yml
 
 ## Overview
 
