@@ -44,7 +44,7 @@ impl WoDWaiters {
             },
             None => {
                 self.data.push(waker.clone());
-                *id = Some(self.data.len());
+                *id = Some(self.data.len() - 1);
             }
         }
     }

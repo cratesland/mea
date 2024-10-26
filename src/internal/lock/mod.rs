@@ -25,6 +25,52 @@ mod critical_section;
 pub(crate) use critical_section::Mutex;
 
 #[cfg(feature = "std")]
+#[cfg_attr(all(feature = "std", feature = "critical-section"), allow(dead_code))]
 mod std_mutex;
 #[cfg(all(not(feature = "critical-section"), feature = "std"))]
 pub(crate) use std_mutex::Mutex;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::UnsafeCell;
+    use std::sync::Arc;
+    use std::vec::Vec;
+
+    #[test]
+    fn test_lock() {
+        let mutex = Mutex::new(42);
+        assert_eq!(42, mutex.with(|v| *v));
+    }
+
+    struct UnsafeSendCell<T>(UnsafeCell<T>);
+    unsafe impl<T> Send for UnsafeSendCell<T> {}
+    unsafe impl<T> Sync for UnsafeSendCell<T> {}
+    impl<T> UnsafeSendCell<T> {
+        fn new(t: T) -> Self {
+            Self(UnsafeCell::new(t))
+        }
+        unsafe fn get(&self) -> *mut T {
+            self.0.get()
+        }
+    }
+
+    #[test]
+    fn test_multi_thread() {
+        let mutex = Arc::new(Mutex::new(()));
+        let counter = Arc::new(UnsafeSendCell::new(0_usize));
+        let handles: Vec<_> = (0..4)
+            .map(|_| {
+                let mutex = mutex.clone();
+                let counter = counter.clone();
+                std::thread::spawn(move || {
+                    mutex.with(|_| unsafe { *counter.get() += 1 });
+                })
+            })
+            .collect();
+        for handle in handles {
+            handle.join().unwrap();
+        }
+        mutex.with(|_| assert_eq!(unsafe { *counter.get() }, 4));
+    }
+}
