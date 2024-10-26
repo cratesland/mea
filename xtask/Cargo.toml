@@ -12,14 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-[workspace]
-members = ["mea", "xtask"]
-resolver = "2"
+[package]
+name = "x"
+version = "3.14159.26535"
 
-[workspace.package]
-edition = "2021"
-homepage = "https://github.com/tisonkun/mea"
-license = "Apache-2.0"
-readme = "README.md"
-repository = "https://github.com/tisonkun/mea"
-rust-version = "1.75.0"
+publish = false
+
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+clap = { version = "4.5.20", features = ["derive"] }
+which = { version = "6.0.3" }

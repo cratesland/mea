@@ -12,10 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub enum MaybeTimedOut<T> {
-    /// Action completed before timeout.
-    Completed,
-    /// Action timed out. `T` contains the asynchronous timer result.
-    TimedOut(T),
-}
+#![no_std]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+
+// NOTE: It is too painful to drop dynamic memory allocation support in no_std environment, at
+// least allocate memory for `Vec` is fundamental.
+extern crate alloc;
+#[cfg(any(test, feature = "std"))]
+extern crate std;
+
+mod internal;
+pub mod waitgroup;

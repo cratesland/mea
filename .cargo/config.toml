@@ -12,14 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-[workspace]
-members = ["mea", "xtask"]
-resolver = "2"
+[alias]
+x = "run --package x --"
 
-[workspace.package]
-edition = "2021"
-homepage = "https://github.com/tisonkun/mea"
-license = "Apache-2.0"
-readme = "README.md"
-repository = "https://github.com/tisonkun/mea"
-rust-version = "1.75.0"
+[env]
+CARGO_WORKSPACE_DIR = { value = "", relative = true }

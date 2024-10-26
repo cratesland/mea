@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod internal;
+mod lock;
+pub(crate) use lock::*;
 
-pub mod timeout;
-pub mod waitgroup;
+mod waiters;
+pub(crate) use waiters::*;

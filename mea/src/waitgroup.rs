@@ -12,17 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::future::Future;
-use std::future::IntoFuture;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::sync::Weak;
-use std::task::Context;
-use std::task::Poll;
+use alloc::sync::Arc;
+use alloc::sync::Weak;
+use core::future::Future;
+use core::future::IntoFuture;
+use core::pin::Pin;
+use core::task::Context;
+use core::task::Poll;
 
 use crate::internal::Mutex;
-use crate::internal::Waiters;
-use crate::timeout::MaybeTimedOut;
+use crate::internal::WoDWaiters;
 
 #[derive(Clone)]
 pub struct WaitGroup {
@@ -33,20 +32,8 @@ impl WaitGroup {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(Inner {
-                waiters: Mutex::new(Waiters::new()),
+                waiters: Mutex::new(WoDWaiters::new()),
             }),
-        }
-    }
-
-    pub fn wait(self) -> WaitGroupFuture {
-        self.into_future()
-    }
-
-    pub fn wait_timeout<T>(self, timer: T) -> WaitGroupTimeoutFuture<T> {
-        WaitGroupTimeoutFuture {
-            id: None,
-            inner: Arc::downgrade(&self.inner),
-            timer,
         }
     }
 }
@@ -71,12 +58,12 @@ impl IntoFuture for WaitGroup {
 }
 
 struct Inner {
-    waiters: Mutex<Waiters>,
+    waiters: Mutex<WoDWaiters>,
 }
 
 impl Drop for Inner {
     fn drop(&mut self) {
-        Waiters::wake_all(&self.waiters);
+        WoDWaiters::wake_all(&self.waiters);
     }
 }
 
@@ -92,43 +79,12 @@ impl Future for WaitGroupFuture {
         let Self { id, inner } = self.get_mut();
         match inner.upgrade() {
             Some(inner) => {
-                let mut lock = inner.waiters.lock();
-                lock.upsert(id, cx.waker());
+                inner.waiters.with(|waiters| {
+                    waiters.upsert(id, cx.waker());
+                });
                 Poll::Pending
             }
             None => Poll::Ready(()),
-        }
-    }
-}
-
-pub struct WaitGroupTimeoutFuture<T> {
-    id: Option<usize>,
-    inner: Weak<Inner>,
-    timer: T,
-}
-
-impl<T: Future> Future for WaitGroupTimeoutFuture<T> {
-    type Output = MaybeTimedOut<T::Output>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // SAFETY: `id` and `inner` are Unpin; `timer` must be pinned before poll.
-        let Self { id, inner, timer } = unsafe { self.get_unchecked_mut() };
-        let timer = unsafe { Pin::new_unchecked(timer) };
-
-        match inner.upgrade() {
-            Some(inner) => match timer.poll(cx) {
-                Poll::Ready(o) => {
-                    let mut lock = inner.waiters.lock();
-                    lock.remove(id);
-                    Poll::Ready(MaybeTimedOut::TimedOut(o))
-                }
-                Poll::Pending => {
-                    let mut lock = inner.waiters.lock();
-                    lock.upsert(id, cx.waker());
-                    Poll::Pending
-                }
-            },
-            None => Poll::Ready(MaybeTimedOut::Completed),
         }
     }
 }
@@ -180,10 +136,12 @@ mod test {
 
         let wg = WaitGroup::new();
         let _wg_clone = wg.clone();
-        let out = test_runtime.block_on(async move {
-            let timer = tokio::time::sleep(Duration::from_millis(50));
-            wg.wait_timeout(timer).await
+        let timeout = test_runtime.block_on(async move {
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_millis(50)) => true ,
+                _ = wg => false,
+            }
         });
-        assert_eq!(out, MaybeTimedOut::TimedOut(()));
+        assert!(timeout);
     }
 }
