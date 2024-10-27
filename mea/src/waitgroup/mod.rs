@@ -13,37 +13,53 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use alloc::sync::Weak;
+use core::fmt;
 use core::future::Future;
 use core::future::IntoFuture;
 use core::pin::Pin;
 use core::task::Context;
 use core::task::Poll;
 
-use crate::internal::Mutex;
-use crate::internal::WakeOnDropWaitSet;
+use crate::internal::WaitQueueSync;
 
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone)]
 pub struct WaitGroup {
-    inner: Arc<Inner>,
-}
-
-impl WaitGroup {
-    pub fn new() -> Self {
-        Self {
-            inner: Arc::new(Inner {
-                waiters: Mutex::new(WakeOnDropWaitSet::new()),
-            }),
-        }
-    }
+    sync: Arc<WaitQueueSync>,
 }
 
 impl Default for WaitGroup {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl WaitGroup {
+    pub fn new() -> Self {
+        Self {
+            sync: Arc::new(WaitQueueSync::new(1)),
+        }
+    }
+}
+
+impl Clone for WaitGroup {
+    fn clone(&self) -> Self {
+        let sync = self.sync.clone();
+        let mut cnt = sync.state();
+        loop {
+            let new_cnt = cnt.saturating_add(1);
+            match sync.cas_state(cnt, new_cnt) {
+                Ok(_) => return Self { sync },
+                Err(x) => cnt = x,
+            }
+        }
+    }
+}
+
+impl Drop for WaitGroup {
+    fn drop(&mut self) {
+        self.sync.release_shared_by_one();
     }
 }
 
@@ -53,43 +69,32 @@ impl IntoFuture for WaitGroup {
     type IntoFuture = WaitGroupFuture;
 
     fn into_future(self) -> Self::IntoFuture {
-        WaitGroupFuture {
-            id: None,
-            inner: Arc::downgrade(&self.inner),
-        }
+        let sync = self.sync.clone();
+        drop(self);
+        WaitGroupFuture { sync }
     }
 }
 
-struct Inner {
-    waiters: Mutex<WakeOnDropWaitSet>,
-}
-
-impl Drop for Inner {
-    fn drop(&mut self) {
-        WakeOnDropWaitSet::wake_all(&self.waiters);
+impl fmt::Debug for WaitGroup {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WaitGroup").finish_non_exhaustive()
     }
 }
 
-/// Future returned by [`WaitGroup::into_future`].
 #[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct WaitGroupFuture {
-    id: Option<usize>,
-    inner: Weak<Inner>,
+    sync: Arc<WaitQueueSync>,
 }
 
 impl Future for WaitGroupFuture {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let Self { id, inner } = self.get_mut();
-        match inner.upgrade() {
-            Some(inner) => {
-                inner.waiters.with(|waiters| {
-                    waiters.upsert(id, cx.waker());
-                });
-                Poll::Pending
-            }
-            None => Poll::Ready(()),
+        let Self { sync } = self.get_mut();
+        if sync.acquire_shared_on_state_is_zero(cx) {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
         }
     }
 }

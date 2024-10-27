@@ -35,21 +35,10 @@ mea = { version = "<version>" }
 ### `no_std`
 
 By default, Mea enables the `std` feature and thus depends on the Rust standard library. To use Mea in a
-`no_std` Rust environment, disable the default features and choose one of the following runtime features.
-
-To use it on Linux, FreeBSD, Windows, and macOS, add the `sync-mutex` feature:
+`no_std` Rust environment, simply disable the default features:
 
 ```toml
-mea = { version = "<version>", default-features = false, features = ["sync-mutex"] }
-```
-
-To use it in an embedded environment, use [
-`critical-section`](https://github.com/rust-embedded/critical-section/) and add one of its implementation libraries by yourself:
-
-```toml
-mea = { version = "<version>", default-features = false, features = ["sync-critical-section"] }
-# choose a critical-section impl; for example, for single-core Cortex-M targets:
-# cortex-m = { version = "0.7.6", features = ["critical-section-single-core"]}
+mea = { version = "<version>", default-features = false }
 ```
 
 ## Minimum Rust version policy

@@ -12,18 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::prelude::rust_2015::Vec;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
-use std::vec::Vec;
-
-use tokio::time::sleep;
 
 use crate::latch::Latch;
 
-/// Asynchronous timer may not be accurate.
 macro_rules! assert_time {
     ($time:expr, $mills:literal $(,)?) => {
         assert!((Duration::from_millis($mills - 1)
@@ -32,27 +29,13 @@ macro_rules! assert_time {
     };
 }
 
-#[tokio::test]
-async fn test_count_down() {
-    let latch = Arc::new(Latch::new(3));
-    latch.count_down();
-    latch.count_down();
-    latch.count_down();
-    assert_eq!(latch.count(), 0);
-}
-
-#[tokio::test]
-async fn test_arrive() {
-    let latch = Latch::new(3);
-    latch.arrive(3);
-    assert_eq!(latch.count(), 0);
-}
-
 #[test]
-fn test_arrive_zero() {
-    let latch = Latch::new(2);
-    latch.arrive(0);
-    assert_eq!(latch.count(), 2);
+fn test_count_down() {
+    let latch = Latch::new(3);
+    latch.count_down();
+    latch.count_down();
+    latch.count_down();
+    assert_eq!(latch.count(), 0);
 }
 
 #[tokio::test]
@@ -66,7 +49,7 @@ async fn test_last_one_signal() {
     let start = Instant::now();
 
     tokio::spawn(async move {
-        sleep(Duration::from_millis(32)).await;
+        tokio::time::sleep(Duration::from_millis(32)).await;
         l1.count_down()
     });
 
@@ -90,7 +73,7 @@ async fn test_gate_wait() {
         })
         .collect();
 
-    sleep(Duration::from_millis(20)).await;
+    tokio::time::sleep(Duration::from_millis(20)).await;
     latch.count_down();
 
     for t in tasks {
@@ -101,7 +84,7 @@ async fn test_gate_wait() {
 #[tokio::test]
 async fn test_multi_tasks() {
     const SIZE: u32 = 16;
-    let latch = Arc::new(Latch::new(SIZE as usize));
+    let latch = Arc::new(Latch::new(SIZE));
     let counter = Arc::new(AtomicU32::new(0));
 
     for _ in 0..SIZE {
@@ -109,7 +92,7 @@ async fn test_multi_tasks() {
         let counter = counter.clone();
 
         tokio::spawn(async move {
-            sleep(Duration::from_millis(20)).await;
+            tokio::time::sleep(Duration::from_millis(20)).await;
             counter.fetch_add(1, Ordering::Relaxed);
             latch.count_down()
         });
@@ -126,7 +109,7 @@ async fn test_multi_tasks() {
 #[tokio::test]
 async fn test_more_count_down() {
     const SIZE: u32 = 16;
-    let latch = Arc::new(Latch::new(SIZE as usize));
+    let latch = Arc::new(Latch::new(SIZE));
     let counter = Arc::new(AtomicU32::new(0));
 
     for _ in 0..(SIZE + (SIZE >> 1)) {
@@ -134,7 +117,7 @@ async fn test_more_count_down() {
         let counter = counter.clone();
 
         tokio::spawn(async move {
-            sleep(Duration::from_millis(10)).await;
+            tokio::time::sleep(Duration::from_millis(10)).await;
             counter.fetch_add(1, Ordering::Relaxed);
             latch.count_down()
         });
@@ -148,17 +131,6 @@ async fn test_more_count_down() {
 }
 
 #[tokio::test]
-async fn test_more_arrive() {
-    let latch = Latch::new(10);
-
-    for _ in 0..4 {
-        latch.arrive(3);
-    }
-
-    assert_eq!(latch.count(), 0);
-}
-
-#[tokio::test]
 async fn test_select_two_wait() {
     let latch1 = Arc::new(Latch::new(1));
     let latch2 = Arc::new(Latch::new(1));
@@ -166,11 +138,12 @@ async fn test_select_two_wait() {
     let l2 = latch2.clone();
 
     tokio::spawn(async move {
-        sleep(Duration::from_millis(50)).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
         l1.count_down();
     });
+
     tokio::spawn(async move {
-        sleep(Duration::from_millis(10)).await;
+        tokio::time::sleep(Duration::from_millis(10)).await;
         l2.count_down();
     });
 
