@@ -52,6 +52,34 @@ impl Latch {
         self.sync.release_shared_by_one();
     }
 
+    /// Decrements the latch count by `n`, re-enable all waiting threads if the
+    /// counter reaches zero after decrement.
+    ///
+    /// It will not cause an overflow by decrement the counter.
+    ///
+    /// * If the `n` is zero or the counter has reached zero then do nothing.
+    /// * If the current count is greater than `n` then decremented by `n`.
+    /// * If the current count is greater than 0 and less than or equal to `n`, then the new count
+    ///   will be zero, and all waiting threads are re-enabled.
+    pub fn arrive(&self, n: u32) {
+        if n != 0 {
+            self.sync.release_shared_by_n(n);
+        }
+    }
+
+    /// Checks that the current counter has reached zero.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error with the current count if the
+    /// counter has not reached zero.
+    pub fn try_wait(&self) -> Result<(), u32> {
+        match self.sync.state() {
+            0 => Ok(()),
+            s => Err(s),
+        }
+    }
+
     /// Returns a future that suspends the current task to wait until the counter reaches zero.
     pub const fn wait(&self) -> LatchWait<'_> {
         LatchWait { latch: self }

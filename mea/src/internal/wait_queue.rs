@@ -182,13 +182,17 @@ mod utils {
 
     impl WaitQueueSync {
         pub(crate) fn release_shared_by_one(&self) {
-            self.release_shared((), |sync, ()| {
+            self.release_shared_by_n(1)
+        }
+
+        pub(crate) fn release_shared_by_n(&self, n: u32) {
+            self.release_shared(n, |sync, n| {
                 let mut cnt = sync.state();
                 loop {
                     if cnt == 0 {
                         return false;
                     }
-                    let new_cnt = cnt.saturating_sub(1);
+                    let new_cnt = cnt.saturating_sub(n);
                     match sync.cas_state(cnt, new_cnt) {
                         Ok(_) => return new_cnt == 0,
                         Err(x) => cnt = x,

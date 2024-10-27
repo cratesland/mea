@@ -20,7 +20,8 @@
 
 Mea provides async utilities that are runtime agnostic.
 
-* WaitGroup
+* [Latch](https://docs.rs/mea/*/mea/latch/struct.Latch.html)
+* [WaitGroup](https://docs.rs/mea/*/mea/waitgroup/struct.WaitGroup.html)
 
 ## Usage
 

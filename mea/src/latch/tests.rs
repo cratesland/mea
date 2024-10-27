@@ -38,6 +38,42 @@ fn test_count_down() {
     assert_eq!(latch.count(), 0);
 }
 
+#[test]
+fn test_try_wait() {
+    let latch = Latch::new(0);
+    assert_eq!(latch.try_wait(), Ok(()));
+}
+
+#[test]
+fn test_try_wait_err() {
+    let latch = Latch::new(3);
+    assert_eq!(latch.try_wait(), Err(3));
+}
+
+#[test]
+fn test_arrive_zero() {
+    let latch = Latch::new(2);
+    latch.arrive(0);
+    assert_eq!(latch.count(), 2);
+}
+
+#[test]
+fn test_more_arrive() {
+    let latch = Latch::new(10);
+    for _ in 0..4 {
+        latch.arrive(3);
+    }
+    assert_eq!(latch.count(), 0);
+}
+
+#[tokio::test]
+async fn test_arrive() {
+    let latch = Latch::new(3);
+    latch.arrive(3);
+    latch.wait().await;
+    assert_eq!(latch.count(), 0);
+}
+
 #[tokio::test]
 async fn test_last_one_signal() {
     let latch = Arc::new(Latch::new(3));
