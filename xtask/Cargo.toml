@@ -14,8 +14,6 @@
 
 [package]
 name = "x"
-version = "3.14159.26535"
-
 publish = false
 
 edition.workspace = true
@@ -28,3 +26,6 @@ rust-version.workspace = true
 [dependencies]
 clap = { version = "4.5.20", features = ["derive"] }
 which = { version = "6.0.3" }
+
+[lints]
+workspace = true
