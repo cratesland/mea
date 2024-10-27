@@ -127,17 +127,18 @@ impl WaitQueueSync {
 
         // 2. enqueue a new waiter node
         let node = Node::new(cx.waker());
-        let token = node.token();
         self.waiters.push(node);
 
         // 3. check again after enqueuing, avoid forever waiting
         if try_acquire(self, arg) {
             if let Some(node) = self.waiters.pop() {
-                // the current call to `poll` is about to return ready, so need not wake up
-                // the node just enqueued
-                if token != node.token() {
-                    node.wake();
-                }
+                // TODO(tisonkun): make it simple for now, review if it is desired later
+                // // the current call to `poll` is about to return ready, so need not wake up
+                // // the node just enqueued
+                // if token != node.token() {
+                //     node.wake();
+                // }
+                node.wake();
             }
             return true;
         }
@@ -155,31 +156,21 @@ impl WaitQueueSync {
 use node::*;
 // encapsulate node fields
 mod node {
-    use core::sync::atomic::AtomicU32;
-    use core::sync::atomic::Ordering;
     use core::task::Waker;
 
     #[derive(Debug)]
     pub(super) struct Node {
-        token: u32,
         waker: Waker,
     }
     impl Node {
         pub(super) fn new(waker: &Waker) -> Self {
-            static TOKEN: AtomicU32 = AtomicU32::new(0);
             Self {
-                token: TOKEN.fetch_add(1, Ordering::AcqRel),
                 waker: waker.clone(),
             }
         }
 
         pub(super) fn wake(self) {
             self.waker.wake();
-        }
-
-        // for identity comparison
-        pub(super) fn token(&self) -> u32 {
-            self.token
         }
     }
 }
