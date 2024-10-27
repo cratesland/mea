@@ -61,66 +61,62 @@ impl WaitQueueSync {
     ///
     /// `try_release_shared` returns `true` if this release of shared mode may permit a waiting
     /// acquire to succeed; and `false` otherwise.
-    ///
-    /// This method itself returns the result of `try_release_shared`.
-    pub(crate) fn release_shared<T, F>(&self, arg: T, try_release_shared: F) -> bool
+    pub(crate) fn release_shared<T, F>(&self, arg: T, try_release_shared: F)
     where
         F: FnOnce(&Self, T) -> bool,
     {
         if try_release_shared(self, arg) {
             self.signal_next_node();
-            true
-        } else {
-            false
         }
     }
 
     /// Acquires in shared mode. Implemented by invoking at least once `try_acquire_shared`,
-    /// returning `true` on success. Otherwise, return `false` to indicate a [`Poll::Pending`]
+    /// returning `Some` on success. Otherwise, return `None` to indicate a [`Poll::Pending`]
     /// in the caller side.
     ///
     /// `arg` is passed to `try_acquire_shared` but is otherwise uninterpreted and can represent
     /// anything on demand. Note that `arg` may be **copied** before passed to `try_acquire_shared`.
     ///
-    /// `try_acquire_shared` returns false on failure; true if acquisition in shared mode succeeded.
-    /// Upon success, this synchronizer has been acquired.
-    pub(crate) fn acquire_shared<T, F>(
+    /// `try_acquire_shared` returns `None` on failure; `Some` if acquisition in shared mode
+    /// succeeded. Upon success, this synchronizer has been acquired.
+    pub(crate) fn acquire_shared<F, T, R>(
         &self,
         cx: &mut Context<'_>,
         arg: T,
         mut try_acquire_shared: F,
-    ) -> bool
+    ) -> Option<R>
     where
         T: Copy,
-        F: FnMut(&Self, T) -> bool,
+        F: FnMut(&Self, T) -> Option<R>,
     {
-        if try_acquire_shared(self, arg) {
-            self.signal_next_node();
-            true
-        } else {
-            self.do_acquire(cx, arg, true, try_acquire_shared)
+        match try_acquire_shared(self, arg) {
+            Some(result) => {
+                self.signal_next_node();
+                Some(result)
+            }
+            None => self.do_acquire(cx, arg, true, try_acquire_shared),
         }
     }
 
-    /// Main acquire method. Returns true if acquired; false otherwise.
-    fn do_acquire<T, F>(
+    /// Main acquire method. Returns `Some` if acquired; `None` otherwise.
+    fn do_acquire<F, T, R>(
         &self,
         cx: &mut Context<'_>,
         arg: T,
         shared: bool,
         mut try_acquire: F,
-    ) -> bool
+    ) -> Option<R>
     where
         T: Copy,
-        F: FnMut(&Self, T) -> bool,
+        F: FnMut(&Self, T) -> Option<R>,
     {
         // 1. before the node start waiting, spin a while to try acquiring
         for _ in 0..16 {
-            if try_acquire(self, arg) {
+            if let Some(result) = try_acquire(self, arg) {
                 if shared {
                     self.signal_next_node();
                 }
-                return true;
+                return Some(result);
             }
             core::hint::spin_loop();
         }
@@ -134,7 +130,7 @@ impl WaitQueueSync {
         self.waiters.push(node);
 
         // 3. check again after enqueuing, avoid forever waiting
-        if try_acquire(self, arg) {
+        if let Some(result) = try_acquire(self, arg) {
             if let Some(node) = self.waiters.pop() {
                 // TODO(tisonkun): make it simple for now, review whether it is desired later
                 // @see 6f740fddb6ae64ea993dacec12b0cbe75b64e9ce for a possible revert
@@ -145,10 +141,10 @@ impl WaitQueueSync {
                 // }
                 node.wake();
             }
-            return true;
+            return Some(result);
         }
 
-        false
+        None
     }
 
     fn signal_next_node(&self) {
@@ -185,9 +181,7 @@ mod utils {
     use super::*;
 
     impl WaitQueueSync {
-        /// Returns `true` if this release of shared mode may permit a waiting acquire to succeed;
-        /// and `false` otherwise.
-        pub(crate) fn release_shared_by_one(&self) -> bool {
+        pub(crate) fn release_shared_by_one(&self) {
             self.release_shared((), |sync, ()| {
                 let mut cnt = sync.state();
                 loop {
@@ -200,13 +194,14 @@ mod utils {
                         Err(x) => cnt = x,
                     }
                 }
-            })
+            });
         }
 
-        /// Returns `true` if the current state is zero; otherwise, registers the waker and returns
-        /// `false`.
+        /// Returns `true` if the current state is zero; otherwise, add the waker to the wait queue
+        /// and returns `false`.
         pub(crate) fn acquire_shared_on_state_is_zero(&self, cx: &mut Context<'_>) -> bool {
-            self.acquire_shared(cx, 1, |sync, _| sync.state() == 0)
+            let result = self.acquire_shared(cx, 1, |sync, _| (sync.state() == 0).then_some(()));
+            result.is_some()
         }
     }
 }
