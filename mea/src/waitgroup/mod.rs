@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::internal::WaitQueueSync;
 use alloc::sync::Arc;
 use core::fmt;
 use core::future::Future;
@@ -20,6 +19,8 @@ use core::future::IntoFuture;
 use core::pin::Pin;
 use core::task::Context;
 use core::task::Poll;
+
+use crate::internal::WaitQueueSync;
 
 #[cfg(test)]
 mod tests;
@@ -58,19 +59,7 @@ impl Clone for WaitGroup {
 
 impl Drop for WaitGroup {
     fn drop(&mut self) {
-        self.sync.release_shared(1, |sync, _| {
-            let mut cnt = sync.state();
-            loop {
-                if cnt == 0 {
-                    return false;
-                }
-                let new_cnt = cnt.saturating_sub(1);
-                match sync.cas_state(cnt, new_cnt) {
-                    Ok(_) => return new_cnt == 0,
-                    Err(x) => cnt = x,
-                }
-            }
-        });
+        self.sync.release_shared_by_one();
     }
 }
 
@@ -101,12 +90,8 @@ impl Future for WaitGroupFuture {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        fn try_acquire_shared(sync: &WaitQueueSync, _: u32) -> bool {
-            sync.state() == 0
-        }
-
         let Self { sync } = self.get_mut();
-        if sync.acquire_shared(cx, 1, try_acquire_shared) {
+        if sync.acquire_shared_on_state_is_zero(cx) {
             Poll::Ready(())
         } else {
             Poll::Pending

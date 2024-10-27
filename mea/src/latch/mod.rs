@@ -49,19 +49,7 @@ impl Latch {
     ///
     /// If the current count equals zero then nothing happens.
     pub fn count_down(&self) {
-        self.sync.release_shared(1, |sync, _| {
-            let mut cnt = sync.state();
-            loop {
-                if cnt == 0 {
-                    return false;
-                }
-                let new_cnt = cnt.saturating_sub(1);
-                match sync.cas_state(cnt, new_cnt) {
-                    Ok(_) => return new_cnt == 0,
-                    Err(x) => cnt = x,
-                }
-            }
-        });
+        self.sync.release_shared_by_one();
     }
 
     /// Returns a future that suspends the current task to wait until the counter reaches zero.
@@ -93,12 +81,8 @@ impl Future for LatchWait<'_> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        fn try_acquire_shared(sync: &WaitQueueSync, _: u32) -> bool {
-            sync.state() == 0
-        }
-
         let Self { latch } = self.get_mut();
-        if latch.sync.acquire_shared(cx, 1, try_acquire_shared) {
+        if latch.sync.acquire_shared_on_state_is_zero(cx) {
             Poll::Ready(())
         } else {
             Poll::Pending

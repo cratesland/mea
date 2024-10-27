@@ -1,7 +1,20 @@
+// Copyright 2024 tison <wander4096@gmail.com>
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering;
 use core::task::Context;
-use core::task::Waker;
 
 use crossbeam_queue::SegQueue;
 
@@ -47,12 +60,12 @@ impl WaitQueueSync {
     /// anything on demand.
     ///
     /// `try_release_shared` returns `true` if this release of shared mode may permit a waiting
-    /// acquire (shared or exclusive) to succeed; and `false` otherwise.
+    /// acquire to succeed; and `false` otherwise.
     ///
     /// This method itself returns the result of `try_release_shared`.
-    pub(crate) fn release_shared<F>(&self, arg: u32, try_release_shared: F) -> bool
+    pub(crate) fn release_shared<T, F>(&self, arg: T, try_release_shared: F) -> bool
     where
-        F: FnOnce(&Self, u32) -> bool,
+        F: FnOnce(&Self, T) -> bool,
     {
         if try_release_shared(self, arg) {
             self.signal_next_node();
@@ -67,18 +80,19 @@ impl WaitQueueSync {
     /// in the caller side.
     ///
     /// `arg` is passed to `try_acquire_shared` but is otherwise uninterpreted and can represent
-    /// anything on demand.
+    /// anything on demand. Note that `arg` may be **copied** before passed to `try_acquire_shared`.
     ///
     /// `try_acquire_shared` returns false on failure; true if acquisition in shared mode succeeded.
     /// Upon success, this synchronizer has been acquired.
-    pub(crate) fn acquire_shared<F>(
+    pub(crate) fn acquire_shared<T, F>(
         &self,
         cx: &mut Context<'_>,
-        arg: u32,
+        arg: T,
         mut try_acquire_shared: F,
     ) -> bool
     where
-        F: FnMut(&Self, u32) -> bool,
+        T: Copy,
+        F: FnMut(&Self, T) -> bool,
     {
         if try_acquire_shared(self, arg) {
             self.signal_next_node();
@@ -89,23 +103,20 @@ impl WaitQueueSync {
     }
 
     /// Main acquire method. Returns true if acquired; false otherwise.
-    fn do_acquire<F>(
+    fn do_acquire<T, F>(
         &self,
         cx: &mut Context<'_>,
-        arg: u32,
+        arg: T,
         shared: bool,
         mut try_acquire: F,
     ) -> bool
     where
-        // returns true if acquired; false otherwise
-        F: FnMut(&Self, u32) -> bool,
+        T: Copy,
+        F: FnMut(&Self, T) -> bool,
     {
-        let node = Node::new(cx.waker());
-
-        // before the node start waiting, spin a while to try acquiring
+        // 1. before the node start waiting, spin a while to try acquiring
         for _ in 0..16 {
             if try_acquire(self, arg) {
-                node.waker.wake();
                 if shared {
                     self.signal_next_node();
                 }
@@ -114,27 +125,92 @@ impl WaitQueueSync {
             core::hint::spin_loop();
         }
 
-        // enqueue a new waiter node
+        // 2. enqueue a new waiter node
+        let node = Node::new(cx.waker());
+        let token = node.token();
         self.waiters.push(node);
+
+        // 3. check again after enqueuing, avoid forever waiting
+        if try_acquire(self, arg) {
+            if let Some(node) = self.waiters.pop() {
+                // the current call to `poll` is about to return ready, so need not wake up
+                // the node just enqueued
+                if token != node.token() {
+                    node.wake();
+                }
+            }
+            return true;
+        }
+
         false
     }
 
     fn signal_next_node(&self) {
         if let Some(node) = self.waiters.pop() {
-            node.waker.wake();
+            node.wake();
         }
     }
 }
 
-#[derive(Debug)]
-struct Node {
-    waker: Waker,
+use node::*;
+// encapsulate node fields
+mod node {
+    use core::sync::atomic::AtomicU32;
+    use core::sync::atomic::Ordering;
+    use core::task::Waker;
+
+    #[derive(Debug)]
+    pub(super) struct Node {
+        token: u32,
+        waker: Waker,
+    }
+    impl Node {
+        pub(super) fn new(waker: &Waker) -> Self {
+            static TOKEN: AtomicU32 = AtomicU32::new(0);
+            Self {
+                token: TOKEN.fetch_add(1, Ordering::AcqRel),
+                waker: waker.clone(),
+            }
+        }
+
+        pub(super) fn wake(self) {
+            self.waker.wake();
+        }
+
+        // for identity comparison
+        pub(super) fn token(&self) -> u32 {
+            self.token
+        }
+    }
 }
 
-impl Node {
-    fn new(waker: &Waker) -> Self {
-        Self {
-            waker: waker.clone(),
+// common utilities
+mod utils {
+    use super::*;
+
+    impl WaitQueueSync {
+        /// Returns `true` if this release of shared mode may permit a waiting acquire to succeed;
+        /// and `false` otherwise.
+        pub(crate) fn release_shared_by_one(&self) -> bool {
+            self.release_shared((), |sync, ()| {
+                let mut cnt = sync.state();
+                loop {
+                    if cnt == 0 {
+                        return false;
+                    }
+                    let new_cnt = cnt.saturating_sub(1);
+                    match sync.cas_state(cnt, new_cnt) {
+                        Ok(_) => return new_cnt == 0,
+                        Err(x) => cnt = x,
+                    }
+                }
+            })
+        }
+
+        /// Returns `true` if the current state is zero; otherwise, registers the waker and returns
+        /// `false`.
+        pub(crate) fn acquire_shared_on_state_is_zero(&self, cx: &mut Context<'_>) -> bool {
+            self.acquire_shared(cx, 1, |sync, _| sync.state() == 0)
         }
     }
 }
