@@ -126,13 +126,18 @@ impl WaitQueueSync {
         }
 
         // 2. enqueue a new waiter node
+        // TODO(tisonkun): if the outer future store Arc<Waker>, it may be possible to check
+        //  `will_wake` here to avoid the push; it would work like if the wakers are stored in
+        //  an mutex guarded slab waiter set and the outer future hold the id, as this crate
+        //  previously did; review whether it is desired later. (Arc::try_unwrap & Arc::ptr_eq)
         let node = Node::new(cx.waker());
         self.waiters.push(node);
 
         // 3. check again after enqueuing, avoid forever waiting
         if try_acquire(self, arg) {
             if let Some(node) = self.waiters.pop() {
-                // TODO(tisonkun): make it simple for now, review if it is desired later
+                // TODO(tisonkun): make it simple for now, review whether it is desired later
+                // @see 6f740fddb6ae64ea993dacec12b0cbe75b64e9ce for a possible revert
                 // // the current call to `poll` is about to return ready, so need not wake up
                 // // the node just enqueued
                 // if token != node.token() {
