@@ -15,8 +15,8 @@
 use std::future::IntoFuture;
 use std::time::Duration;
 
+use super::*;
 use crate::test_runtime;
-use crate::waitgroup::WaitGroup;
 
 #[test]
 fn test_wait_group_drop() {

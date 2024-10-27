@@ -12,25 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![no_std]
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+use super::*;
+use std::sync::Arc;
 
-// NOTE: It is too painful to drop dynamic memory allocation support in no_std environment.
-extern crate alloc;
-#[cfg(any(test, feature = "std"))]
-extern crate std;
+#[test]
+fn no_permits() {
+    // this should not panic
+    Semaphore::new(0);
+}
 
-mod internal;
-
-pub mod latch;
-pub mod semaphore;
-pub mod waitgroup;
-
-#[cfg(test)]
-fn test_runtime() -> &'static tokio::runtime::Runtime {
-    use std::sync::OnceLock;
-
-    use tokio::runtime::Runtime;
-    static RT: OnceLock<Runtime> = OnceLock::new();
-    RT.get_or_init(|| Runtime::new().unwrap())
+#[tokio::test]
+async fn add_permits() {
+    let sem = Arc::new(Semaphore::new(0));
+    let sem_clone = sem.clone();
+    let j = tokio::spawn(async move {
+        let _p2 = sem_clone.acquire(1).await;
+    });
+    sem.release(1);
+    j.await.unwrap();
 }

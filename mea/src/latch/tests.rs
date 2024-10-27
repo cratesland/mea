@@ -19,7 +19,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 
-use crate::latch::Latch;
+use super::*;
 
 macro_rules! assert_time {
     ($time:expr, $mills:literal $(,)?) => {

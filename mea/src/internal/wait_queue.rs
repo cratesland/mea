@@ -181,11 +181,11 @@ mod utils {
     use super::*;
 
     impl WaitQueueSync {
-        pub(crate) fn release_shared_by_one(&self) {
-            self.release_shared_by_n(1)
+        pub(crate) fn subtract_shared_by_one(&self) {
+            self.subtract_shared_by_n(1)
         }
 
-        pub(crate) fn release_shared_by_n(&self, n: u32) {
+        pub(crate) fn subtract_shared_by_n(&self, n: u32) {
             self.release_shared(n, |sync, n| {
                 let mut cnt = sync.state();
                 loop {

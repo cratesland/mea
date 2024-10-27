@@ -27,6 +27,15 @@ pub struct Latch {
     sync: WaitQueueSync,
 }
 
+
+impl fmt::Debug for Latch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Latch")
+            .field("count", &self.count())
+            .finish_non_exhaustive()
+    }
+}
+
 impl Latch {
     /// Constructs a `Latch` initialized with the given count.
     pub const fn new(count: u32) -> Self {
@@ -49,7 +58,7 @@ impl Latch {
     ///
     /// If the current count equals zero then nothing happens.
     pub fn count_down(&self) {
-        self.sync.release_shared_by_one();
+        self.sync.subtract_shared_by_one();
     }
 
     /// Decrements the latch count by `n`, re-enable all waiting threads if the
@@ -63,7 +72,7 @@ impl Latch {
     ///   will be zero, and all waiting threads are re-enabled.
     pub fn arrive(&self, n: u32) {
         if n != 0 {
-            self.sync.release_shared_by_n(n);
+            self.sync.subtract_shared_by_n(n);
         }
     }
 
@@ -83,14 +92,6 @@ impl Latch {
     /// Returns a future that suspends the current task to wait until the counter reaches zero.
     pub const fn wait(&self) -> LatchWait<'_> {
         LatchWait { latch: self }
-    }
-}
-
-impl fmt::Debug for Latch {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Latch")
-            .field("count", &self.count())
-            .finish_non_exhaustive()
     }
 }
 
