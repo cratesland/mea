@@ -12,11 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod lock;
-pub(crate) use lock::*;
+use core::sync::atomic::AtomicPtr;
+use core::sync::atomic::Ordering;
 
-mod waitset;
-pub(crate) use waitset::*;
+mod node;
+use node::Node;
 
-mod lock_queue;
-pub(crate) use lock_queue::*;
+mod syncer;
+pub(crate) use syncer::*;
+
+fn ptr_to_node<'a>(ptr: &AtomicPtr<Node>) -> Option<&'a mut Node> {
+    let ptr = ptr.load(Ordering::Acquire);
+    if ptr.is_null() {
+        None
+    } else {
+        Some(unsafe { &mut *ptr })
+    }
+}
