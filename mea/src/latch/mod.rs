@@ -59,8 +59,8 @@ impl Latch {
     ///
     /// * If the `n` is zero or the counter has reached zero then do nothing.
     /// * If the current count is greater than `n` then decremented by `n`.
-    /// * If the current count is greater than 0 and less than or equal to `n`,
-    ///   then the new count will be zero, and all waiting threads are re-enabled.
+    /// * If the current count is greater than 0 and less than or equal to `n`, then the new count
+    ///   will be zero, and all waiting threads are re-enabled.
     pub fn arrive(&self, n: u32) {
         if n != 0 {
             self.sync.release_shared_by_n(n);
