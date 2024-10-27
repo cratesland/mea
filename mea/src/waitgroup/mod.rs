@@ -29,6 +29,12 @@ pub struct WaitGroup {
     sync: Arc<WaitQueueSync>,
 }
 
+impl fmt::Debug for WaitGroup {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WaitGroup").finish_non_exhaustive()
+    }
+}
+
 impl Default for WaitGroup {
     fn default() -> Self {
         Self::new()
@@ -59,7 +65,7 @@ impl Clone for WaitGroup {
 
 impl Drop for WaitGroup {
     fn drop(&mut self) {
-        self.sync.release_shared_by_one();
+        self.sync.subtract_shared_by_one();
     }
 }
 
@@ -75,15 +81,15 @@ impl IntoFuture for WaitGroup {
     }
 }
 
-impl fmt::Debug for WaitGroup {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("WaitGroup").finish_non_exhaustive()
-    }
-}
-
 #[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct WaitGroupFuture {
     sync: Arc<WaitQueueSync>,
+}
+
+impl fmt::Debug for WaitGroupFuture {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WaitGroupFuture").finish_non_exhaustive()
+    }
 }
 
 impl Future for WaitGroupFuture {

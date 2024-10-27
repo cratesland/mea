@@ -23,6 +23,7 @@ extern crate std;
 mod internal;
 
 pub mod latch;
+pub mod semaphore;
 pub mod waitgroup;
 
 #[cfg(test)]
