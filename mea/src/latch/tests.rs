@@ -13,7 +13,8 @@
 // limitations under the License.
 
 use std::prelude::rust_2015::Vec;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::AtomicU32;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;

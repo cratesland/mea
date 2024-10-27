@@ -15,8 +15,7 @@
 #![no_std]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
-// NOTE: It is too painful to drop dynamic memory allocation support in no_std environment, at
-// least allocate memory for `Vec` is fundamental.
+// NOTE: It is too painful to drop dynamic memory allocation support in no_std environment.
 extern crate alloc;
 #[cfg(any(test, feature = "std"))]
 extern crate std;

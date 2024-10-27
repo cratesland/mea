@@ -18,20 +18,20 @@ use core::pin::Pin;
 use core::task::Context;
 use core::task::Poll;
 
-use crate::internal::LockQueueSyncer;
+use crate::internal::WaitQueueSync;
 
 #[cfg(test)]
 mod tests;
 
 pub struct Latch {
-    syncer: LockQueueSyncer,
+    sync: WaitQueueSync,
 }
 
 impl Latch {
     /// Constructs a `Latch` initialized with the given count.
     pub const fn new(count: u32) -> Self {
         Self {
-            syncer: LockQueueSyncer::new(count),
+            sync: WaitQueueSync::new(count),
         }
     }
 
@@ -39,7 +39,7 @@ impl Latch {
     ///
     /// This method is typically used for debugging and testing purposes.
     pub fn count(&self) -> u32 {
-        self.syncer.state()
+        self.sync.state()
     }
 
     /// Decrements the latch count, wake up all pending tasks if the counter reaches zero.
@@ -49,14 +49,14 @@ impl Latch {
     ///
     /// If the current count equals zero then nothing happens.
     pub fn count_down(&self) {
-        self.syncer.release_shared(1, |syncer, _| {
-            let mut cnt = syncer.state();
+        self.sync.release_shared(1, |sync, _| {
+            let mut cnt = sync.state();
             loop {
                 if cnt == 0 {
                     return false;
                 }
                 let new_cnt = cnt.saturating_sub(1);
-                match syncer.cas_state(cnt, new_cnt) {
+                match sync.cas_state(cnt, new_cnt) {
                     Ok(_) => return new_cnt == 0,
                     Err(x) => cnt = x,
                 }
@@ -93,11 +93,12 @@ impl Future for LatchWait<'_> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        fn try_acquire_shared(sync: &WaitQueueSync, _: u32) -> bool {
+            sync.state() == 0
+        }
+
         let Self { latch } = self.get_mut();
-        if latch
-            .syncer
-            .acquire_shared(cx, 1, |syncer, _| if syncer.state() != 0 { -1 } else { 1 })
-        {
+        if latch.sync.acquire_shared(cx, 1, try_acquire_shared) {
             Poll::Ready(())
         } else {
             Poll::Pending

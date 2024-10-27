@@ -12,11 +12,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod lock;
-pub(crate) use lock::*;
-
-mod waitset;
-pub(crate) use waitset::*;
-
-mod lock_queue;
-pub(crate) use lock_queue::*;
+mod wait_queue;
+pub(crate) use wait_queue::*;
