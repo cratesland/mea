@@ -23,3 +23,16 @@ license = "Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/tisonkun/mea"
 rust-version = "1.75.0"
+
+[workspace.lints.rust]
+unknown_lints = "deny"
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+
+[workspace.metadata.release]
+pre-release-commit-message = "chore: release v{{version}}"
+shared-version = true
+sign-tag = true
+tag-name = "v{{version}}"
