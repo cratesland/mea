@@ -61,7 +61,7 @@ impl Semaphore {
     /// Attempts to acquire `n` permits from this semaphore.
     pub fn try_acquire(&self, permits: u32) -> Option<SemaphorePermit<'_>> {
         non_fair_try_acquire_shared(&self.sync, permits)
-            .map(|_| SemaphorePermit { sem: self, permits })
+            .then_some(SemaphorePermit { sem: self, permits })
     }
 
     /// Adds `n` new permits to the semaphore.
@@ -90,12 +90,15 @@ impl Semaphore {
     }
 }
 
-fn non_fair_try_acquire_shared(sync: &WaitQueueSync, acquires: u32) -> Option<()> {
+fn non_fair_try_acquire_shared(sync: &WaitQueueSync, acquires: u32) -> bool {
     let mut available = sync.state();
     loop {
-        let remaining = available.checked_sub(acquires)?;
+        let Some(remaining) = available.checked_sub(acquires) else {
+            return false;
+        };
+
         match sync.cas_state(available, remaining) {
-            Ok(_) => return Some(()),
+            Ok(_) => return true,
             Err(x) => available = x,
         }
     }
@@ -174,7 +177,6 @@ impl Future for Acquire<'_> {
         if sem
             .sync
             .acquire_shared(cx, *permits, non_fair_try_acquire_shared)
-            .is_some()
         {
             Poll::Ready(())
         } else {
