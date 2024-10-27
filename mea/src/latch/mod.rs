@@ -27,7 +27,6 @@ pub struct Latch {
     sync: WaitQueueSync,
 }
 
-
 impl fmt::Debug for Latch {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Latch")

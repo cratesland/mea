@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::internal::WaitQueueSync;
 use core::fmt;
 use core::future::Future;
 use core::pin::Pin;
-use core::task::{Context, Poll};
+use core::task::Context;
+use core::task::Poll;
+
+use crate::internal::WaitQueueSync;
 
 #[cfg(test)]
 mod tests;
@@ -34,6 +36,14 @@ impl fmt::Debug for Semaphore {
 }
 
 impl Semaphore {
+    /// The maximum number of permits which a semaphore can hold.
+    ///
+    /// Exceeding this limit typically results in a panic.
+    // TODO(tisonkun): consider whether reverse some bits for status, e.g., tokio's semaphore
+    //  reserves one bit to indicate a closed semaphore. But I'm yet to see some real use cases
+    //  to "close" a semaphore.
+    pub const MAX_PERMITS: u32 = u32::MAX;
+
     /// Constructs a `Semaphore` initialized with the given permits.
     pub const fn new(permits: u32) -> Self {
         Self {
@@ -44,13 +54,14 @@ impl Semaphore {
     /// Returns the current number of permits available in this semaphore.
     ///
     /// This method is typically used for debugging and testing purposes.
-    pub fn available_permits(&self) -> usize {
-        self.sync.state() as usize
+    pub fn available_permits(&self) -> u32 {
+        self.sync.state()
     }
 
     /// Attempts to acquire `n` permits from this semaphore.
-    pub fn try_acquire(&self, permits: u32) -> bool {
-        non_fair_try_acquire_shared(&self.sync, permits).is_some()
+    pub fn try_acquire(&self, permits: u32) -> Option<SemaphorePermit<'_>> {
+        non_fair_try_acquire_shared(&self.sync, permits)
+            .map(|_| SemaphorePermit { sem: self, permits })
     }
 
     /// Adds `n` new permits to the semaphore.
@@ -72,11 +83,10 @@ impl Semaphore {
     }
 
     /// Acquires `n` permits from the semaphore.
-    pub fn acquire(&self, permits: u32) -> Acquire {
-        Acquire {
-            semaphore: self,
-            permits,
-        }
+    pub async fn acquire(&self, permits: u32) -> SemaphorePermit<'_> {
+        let f = Acquire { sem: self, permits };
+        f.await;
+        SemaphorePermit { sem: self, permits }
     }
 }
 
@@ -91,9 +101,60 @@ fn non_fair_try_acquire_shared(sync: &WaitQueueSync, acquires: u32) -> Option<()
     }
 }
 
+/// A permit from the semaphore.
+///
+/// This type is created by the [`acquire`] method.
+///
+/// [`acquire`]: Semaphore::acquire()
+#[must_use]
+#[derive(Debug)]
+pub struct SemaphorePermit<'a> {
+    sem: &'a Semaphore,
+    permits: u32,
+}
+
+impl SemaphorePermit<'_> {
+    /// Forgets the permit **without** releasing it back to the semaphore.
+    /// This can be used to reduce the amount of permits available from a
+    /// semaphore.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    ///
+    /// use mea::semaphore::Semaphore;
+    ///
+    /// let sem = Arc::new(Semaphore::new(10));
+    /// {
+    ///     let permit = sem.try_acquire(5).unwrap();
+    ///     assert_eq!(sem.available_permits(), 5);
+    ///     permit.forget();
+    /// }
+    ///
+    /// // Since we forgot the permit, available permits won't go back to its initial value
+    /// // even after the permit is dropped.
+    /// assert_eq!(sem.available_permits(), 5);
+    /// ```
+    pub fn forget(mut self) {
+        self.permits = 0;
+    }
+
+    /// Returns the number of permits held by `self`.
+    pub fn permits(&self) -> u32 {
+        self.permits
+    }
+}
+
+impl Drop for SemaphorePermit<'_> {
+    fn drop(&mut self) {
+        self.sem.release(self.permits);
+    }
+}
+
 #[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct Acquire<'a> {
-    semaphore: &'a Semaphore,
+    sem: &'a Semaphore,
     permits: u32,
 }
 
@@ -109,8 +170,8 @@ impl Future for Acquire<'_> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let Self { semaphore, permits } = self.get_mut();
-        if semaphore
+        let Self { sem, permits } = self.get_mut();
+        if sem
             .sync
             .acquire_shared(cx, *permits, non_fair_try_acquire_shared)
             .is_some()
