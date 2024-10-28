@@ -14,7 +14,7 @@
 
 [package]
 name = "mea"
-version = "0.0.3"
+version = "0.0.4"
 
 categories = ["asynchronous", "concurrency", "no-std"]
 description = "Async Rust utilities that are runtime agnostic."
