@@ -26,21 +26,10 @@ Mea provides async utilities that are runtime agnostic.
 
 ## Usage
 
-### Default Features
-
 Add the dependency to your `Cargo.toml` via:
 
-```toml
-mea = { version = "<version>" }
-```
-
-### `no_std`
-
-By default, Mea enables the `std` feature and thus depends on the Rust standard library. To use Mea in a
-`no_std` Rust environment, simply disable the default features:
-
-```toml
-mea = { version = "<version>", default-features = false }
+```shell
+cargo add mea
 ```
 
 ## Minimum Rust version policy

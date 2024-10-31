@@ -16,7 +16,7 @@
 name = "mea"
 version = "0.0.4"
 
-categories = ["asynchronous", "concurrency", "no-std"]
+categories = ["asynchronous", "concurrency"]
 description = "Async Rust utilities that are runtime agnostic."
 documentation = "https://docs.rs/mea"
 keywords = ["waitgroup", "asynchronous", "concurrency", "synchronization"]
@@ -32,17 +32,11 @@ rust-version.workspace = true
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
-[features]
-default = ["std"]
-std = ["crossbeam-queue/std"]
-
 [dependencies]
-crossbeam-queue = { version = "0.3.11", default-features = false, features = [
-  "alloc",
-] }
+slab = { version = "0.4.9" }
 
 [dev-dependencies]
-pollster = { version = "0.3.0" }
+pollster = { version = "0.4.0" }
 tokio = { version = "1.41.0", features = ["full"] }
 
 [lints]

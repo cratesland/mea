@@ -12,19 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![no_std]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
-
-// NOTE: It is too painful to drop dynamic memory allocation support in no_std environment.
-extern crate alloc;
-#[cfg(any(test, feature = "std"))]
-extern crate std;
 
 mod internal;
 
 pub mod latch;
-pub mod mutex;
-pub mod semaphore;
 pub mod waitgroup;
 
 #[cfg(test)]
