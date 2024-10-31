@@ -105,12 +105,11 @@ impl Future for WaitGroupFuture {
         if state.spin_wait(16).is_err() {
             state.register_waker(idx, cx);
             // double check after register waker, to catch the update between two steps
-            if state.spin_wait(16).is_err() {
+            if state.spin_wait(0).is_err() {
                 return Poll::Pending;
             }
         }
 
-        state.wake_all();
         Poll::Ready(())
     }
 }

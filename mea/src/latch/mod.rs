@@ -88,7 +88,7 @@ impl Latch {
     }
 
     /// Returns a future that suspends the current task to wait until the counter reaches zero.
-    pub const fn wait(&self) -> LatchWait<'_> {
+    pub fn wait(&self) -> LatchWait<'_> {
         LatchWait {
             idx: None,
             latch: self,
@@ -118,12 +118,11 @@ impl Future for LatchWait<'_> {
         if latch.state.spin_wait(16).is_err() {
             latch.state.register_waker(idx, cx);
             // double check after register waker, to catch the update between two steps
-            if latch.state.spin_wait(16).is_err() {
+            if latch.state.spin_wait(0).is_err() {
                 return Poll::Pending;
             }
         }
 
-        latch.state.wake_all();
         Poll::Ready(())
     }
 }

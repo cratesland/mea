@@ -16,6 +16,7 @@
 
 mod internal;
 
+pub mod barrier;
 pub mod latch;
 pub mod waitgroup;
 

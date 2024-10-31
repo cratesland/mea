@@ -14,10 +14,10 @@
 
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
-use std::sync::Mutex;
 use std::task::Context;
 use std::task::Waker;
 
+use parking_lot::Mutex;
 use slab::Slab;
 
 #[derive(Debug)]
@@ -55,13 +55,22 @@ impl CountdownState {
             .map(|_| ())
     }
 
+    /// Resets the counter to `count` and wakes up all waiters.
+    pub(crate) fn reset(&self, count: u32) {
+        let mut waiters = self.waiters.lock();
+        self.state.store(count, Ordering::Release);
+        let waiters = std::mem::take(&mut *waiters);
+        for (_, waker) in waiters.into_iter() {
+            waker.wake();
+        }
+    }
+
     /// Drain and wake up all waiters.
     pub(crate) fn wake_all(&self) {
-        let mut waiters = self.waiters.lock().unwrap();
-        if !waiters.is_empty() {
-            for waker in waiters.drain() {
-                waker.wake();
-            }
+        let mut waiters = self.waiters.lock();
+        let waiters = std::mem::take(&mut *waiters);
+        for (_, waker) in waiters.into_iter() {
+            waker.wake();
         }
     }
 
@@ -70,7 +79,7 @@ impl CountdownState {
     /// `idx` must be `None` when the waker is not registered, or `Some(key)` where `key` is
     /// a value previously returned by this method.
     pub(crate) fn register_waker(&self, idx: &mut Option<usize>, cx: &mut Context<'_>) {
-        let mut waiters = self.waiters.lock().unwrap();
+        let mut waiters = self.waiters.lock();
         match *idx {
             None => {
                 let key = waiters.insert(cx.waker().clone());
