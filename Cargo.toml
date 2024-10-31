@@ -26,7 +26,6 @@ rust-version = "1.75.0"
 
 [workspace.lints.rust]
 unknown_lints = "deny"
-unsafe_code = "deny"
 
 [workspace.lints.clippy]
 dbg_macro = "deny"

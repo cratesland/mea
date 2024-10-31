@@ -23,6 +23,7 @@ extern crate std;
 mod internal;
 
 pub mod latch;
+pub mod mutex;
 pub mod semaphore;
 pub mod waitgroup;
 

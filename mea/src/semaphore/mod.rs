@@ -60,7 +60,13 @@ impl Semaphore {
 
     /// Attempts to acquire `n` permits from this semaphore.
     pub fn try_acquire(&self, permits: u32) -> Option<SemaphorePermit<'_>> {
-        try_acquire_shared(&self.sync, permits).then_some(SemaphorePermit { sem: self, permits })
+        self.intern_try_acquire(permits)
+            .then_some(SemaphorePermit { sem: self, permits })
+    }
+
+    /// Attempts to acquire `n` permits from this semaphore, without returning a permit.
+    pub(crate) fn intern_try_acquire(&self, permits: u32) -> bool {
+        try_acquire_shared(&self.sync, permits)
     }
 
     /// Adds `n` new permits to the semaphore.
@@ -83,9 +89,13 @@ impl Semaphore {
 
     /// Acquires `n` permits from the semaphore.
     pub async fn acquire(&self, permits: u32) -> SemaphorePermit<'_> {
-        let f = Acquire { sem: self, permits };
-        f.await;
+        self.intern_acquire(permits).await;
         SemaphorePermit { sem: self, permits }
+    }
+
+    /// Acquires `n` permits from the semaphore, without returning a permit.
+    pub(crate) fn intern_acquire(&self, permits: u32) -> Acquire<'_> {
+        Acquire { sem: self, permits }
     }
 }
 
