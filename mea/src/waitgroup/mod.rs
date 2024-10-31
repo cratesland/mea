@@ -12,21 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
-use core::fmt;
-use core::future::Future;
-use core::future::IntoFuture;
-use core::pin::Pin;
-use core::task::Context;
-use core::task::Poll;
+use std::fmt;
+use std::future::Future;
+use std::future::IntoFuture;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::Context;
+use std::task::Poll;
 
-use crate::internal::WaitQueueSync;
+use crate::internal::CountdownState;
 
 #[cfg(test)]
 mod tests;
 
 pub struct WaitGroup {
-    sync: Arc<WaitQueueSync>,
+    state: Arc<CountdownState>,
 }
 
 impl fmt::Debug for WaitGroup {
@@ -44,19 +44,19 @@ impl Default for WaitGroup {
 impl WaitGroup {
     pub fn new() -> Self {
         Self {
-            sync: Arc::new(WaitQueueSync::new(1)),
+            state: Arc::new(CountdownState::new(1)),
         }
     }
 }
 
 impl Clone for WaitGroup {
     fn clone(&self) -> Self {
-        let sync = self.sync.clone();
+        let sync = self.state.clone();
         let mut cnt = sync.state();
         loop {
             let new_cnt = cnt.saturating_add(1);
             match sync.cas_state(cnt, new_cnt) {
-                Ok(_) => return Self { sync },
+                Ok(_) => return Self { state: sync },
                 Err(x) => cnt = x,
             }
         }
@@ -65,7 +65,9 @@ impl Clone for WaitGroup {
 
 impl Drop for WaitGroup {
     fn drop(&mut self) {
-        self.sync.subtract_shared_by_one();
+        if self.state.decrement(1) {
+            self.state.wake_all();
+        }
     }
 }
 
@@ -75,15 +77,16 @@ impl IntoFuture for WaitGroup {
     type IntoFuture = WaitGroupFuture;
 
     fn into_future(self) -> Self::IntoFuture {
-        let sync = self.sync.clone();
+        let state = self.state.clone();
         drop(self);
-        WaitGroupFuture { sync }
+        WaitGroupFuture { idx: None, state }
     }
 }
 
 #[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct WaitGroupFuture {
-    sync: Arc<WaitQueueSync>,
+    idx: Option<usize>,
+    state: Arc<CountdownState>,
 }
 
 impl fmt::Debug for WaitGroupFuture {
@@ -96,11 +99,18 @@ impl Future for WaitGroupFuture {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let Self { sync } = self.get_mut();
-        if sync.acquire_shared_on_state_is_zero(cx) {
-            Poll::Ready(())
-        } else {
-            Poll::Pending
+        let Self { idx, state } = self.get_mut();
+
+        // register waker if the counter is not zero
+        if state.spin_wait(16).is_err() {
+            state.register_waker(idx, cx);
+            // double check after register waker, to catch the update between two steps
+            if state.spin_wait(16).is_err() {
+                return Poll::Pending;
+            }
         }
+
+        state.wake_all();
+        Poll::Ready(())
     }
 }

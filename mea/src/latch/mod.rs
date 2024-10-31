@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::fmt;
-use core::future::Future;
-use core::pin::Pin;
-use core::task::Context;
-use core::task::Poll;
+use std::fmt;
+use std::future::Future;
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
 
-use crate::internal::WaitQueueSync;
+use crate::internal::CountdownState;
 
 #[cfg(test)]
 mod tests;
 
 pub struct Latch {
-    sync: WaitQueueSync,
+    state: CountdownState,
 }
 
 impl fmt::Debug for Latch {
@@ -37,9 +37,9 @@ impl fmt::Debug for Latch {
 
 impl Latch {
     /// Constructs a `Latch` initialized with the given count.
-    pub const fn new(count: u32) -> Self {
+    pub fn new(count: u32) -> Self {
         Self {
-            sync: WaitQueueSync::new(count),
+            state: CountdownState::new(count),
         }
     }
 
@@ -47,7 +47,7 @@ impl Latch {
     ///
     /// This method is typically used for debugging and testing purposes.
     pub fn count(&self) -> u32 {
-        self.sync.state()
+        self.state.state()
     }
 
     /// Decrements the latch count, wake up all pending tasks if the counter reaches zero.
@@ -57,7 +57,9 @@ impl Latch {
     ///
     /// If the current count equals zero then nothing happens.
     pub fn count_down(&self) {
-        self.sync.subtract_shared_by_one();
+        if self.state.decrement(1) {
+            self.state.wake_all();
+        }
     }
 
     /// Decrements the latch count by `n`, re-enable all waiting threads if the
@@ -70,8 +72,8 @@ impl Latch {
     /// * If the current count is greater than 0 and less than or equal to `n`, then the new count
     ///   will be zero, and all waiting threads are re-enabled.
     pub fn arrive(&self, n: u32) {
-        if n != 0 {
-            self.sync.subtract_shared_by_n(n);
+        if n != 0 && self.state.decrement(n) {
+            self.state.wake_all();
         }
     }
 
@@ -82,20 +84,21 @@ impl Latch {
     /// This function will return an error with the current count if the
     /// counter has not reached zero.
     pub fn try_wait(&self) -> Result<(), u32> {
-        match self.sync.state() {
-            0 => Ok(()),
-            s => Err(s),
-        }
+        self.state.spin_wait(0)
     }
 
     /// Returns a future that suspends the current task to wait until the counter reaches zero.
     pub const fn wait(&self) -> LatchWait<'_> {
-        LatchWait { latch: self }
+        LatchWait {
+            idx: None,
+            latch: self,
+        }
     }
 }
 
 #[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct LatchWait<'a> {
+    idx: Option<usize>,
     latch: &'a Latch,
 }
 
@@ -109,11 +112,18 @@ impl Future for LatchWait<'_> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let Self { latch } = self.get_mut();
-        if latch.sync.acquire_shared_on_state_is_zero(cx) {
-            Poll::Ready(())
-        } else {
-            Poll::Pending
+        let Self { idx, latch } = self.get_mut();
+
+        // register waker if the counter is not zero
+        if latch.state.spin_wait(16).is_err() {
+            latch.state.register_waker(idx, cx);
+            // double check after register waker, to catch the update between two steps
+            if latch.state.spin_wait(16).is_err() {
+                return Poll::Pending;
+            }
         }
+
+        latch.state.wake_all();
+        Poll::Ready(())
     }
 }

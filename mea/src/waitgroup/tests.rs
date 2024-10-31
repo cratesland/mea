@@ -54,3 +54,28 @@ fn test_wait_group_timeout() {
     });
     assert!(timeout);
 }
+
+#[test]
+fn test_wait_group_cancel() {
+    let wg = WaitGroup::new();
+    let wg_clone = wg.clone().into_future();
+    let wg_clone_2 = wg.clone().into_future();
+    test_runtime().block_on(async move {
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::ZERO) => {},
+            _ = wg_clone => {}
+        }
+    });
+    let fut = test_runtime().spawn(async move {
+        wg_clone_2.await;
+    });
+    std::thread::sleep(Duration::from_millis(50));
+    drop(wg);
+    let timeout = test_runtime().block_on(async move {
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs(60)) => true ,
+            _ = fut => false,
+        }
+    });
+    assert!(!timeout);
+}
