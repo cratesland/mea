@@ -20,8 +20,8 @@
 
 Mea provides async utilities that are runtime agnostic.
 
+* [Barrier](https://docs.rs/mea/*/mea/barrier/struct.Barrier.html)
 * [Latch](https://docs.rs/mea/*/mea/latch/struct.Latch.html)
-* [Semaphore](https://docs.rs/mea/*/mea/semaphore/struct.Semaphore.html)
 * [WaitGroup](https://docs.rs/mea/*/mea/waitgroup/struct.WaitGroup.html)
 
 ## Usage

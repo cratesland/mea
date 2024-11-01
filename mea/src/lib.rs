@@ -28,3 +28,18 @@ fn test_runtime() -> &'static tokio::runtime::Runtime {
     static RT: OnceLock<Runtime> = OnceLock::new();
     RT.get_or_init(|| Runtime::new().unwrap())
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::barrier::Barrier;
+    use crate::latch::Latch;
+    use crate::waitgroup::WaitGroup;
+
+    #[test]
+    fn send_and_sync() {
+        fn assert_send_and_sync<T: Send + Sync>() {}
+        assert_send_and_sync::<Barrier>();
+        assert_send_and_sync::<Latch>();
+        assert_send_and_sync::<WaitGroup>();
+    }
+}

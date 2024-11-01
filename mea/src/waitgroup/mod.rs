@@ -74,28 +74,28 @@ impl Drop for WaitGroup {
 impl IntoFuture for WaitGroup {
     type Output = ();
 
-    type IntoFuture = WaitGroupFuture;
+    type IntoFuture = Wait;
 
     fn into_future(self) -> Self::IntoFuture {
         let state = self.state.clone();
         drop(self);
-        WaitGroupFuture { idx: None, state }
+        Wait { idx: None, state }
     }
 }
 
 #[must_use = "futures do nothing unless you `.await` or poll them"]
-pub struct WaitGroupFuture {
+pub struct Wait {
     idx: Option<usize>,
     state: Arc<CountdownState>,
 }
 
-impl fmt::Debug for WaitGroupFuture {
+impl fmt::Debug for Wait {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("WaitGroupFuture").finish_non_exhaustive()
+        f.debug_struct("Wait").finish_non_exhaustive()
     }
 }
 
-impl Future for WaitGroupFuture {
+impl Future for Wait {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
