@@ -18,9 +18,7 @@ use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
 
-use parking_lot::Mutex;
-
-use crate::internal::CountdownState;
+use crate::internal::{CountdownState, Mutex};
 
 #[cfg(test)]
 mod tests;

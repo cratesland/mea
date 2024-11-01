@@ -17,7 +17,7 @@ use std::sync::atomic::Ordering;
 use std::task::Context;
 use std::task::Waker;
 
-use parking_lot::Mutex;
+use crate::internal::Mutex;
 use slab::Slab;
 
 #[derive(Debug)]
