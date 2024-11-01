@@ -16,7 +16,8 @@ use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 use std::task::Context;
 
-use crate::internal::{Mutex, WaitSet};
+use crate::internal::Mutex;
+use crate::internal::WaitSet;
 
 #[derive(Debug)]
 pub(crate) struct CountdownState {
@@ -51,13 +52,6 @@ impl CountdownState {
         self.state
             .compare_exchange_weak(current, new, Ordering::Release, Ordering::Relaxed)
             .map(|_| ())
-    }
-
-    /// Resets the counter to `count` and wakes up all waiters.
-    pub(crate) fn reset(&self, count: u32) {
-        let mut waiters = self.waiters.lock();
-        self.state.store(count, Ordering::Release);
-        waiters.wake_all();
     }
 
     /// Drain and wake up all waiters.

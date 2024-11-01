@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::internal::{Mutex, WaitSet};
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
+
+use crate::internal::Mutex;
+use crate::internal::WaitSet;
 
 #[cfg(test)]
 mod tests;
@@ -89,7 +91,7 @@ impl Barrier {
 }
 
 #[must_use = "futures do nothing unless you `.await` or poll them"]
-pub struct BarrierWait<'a> {
+struct BarrierWait<'a> {
     idx: Option<usize>,
     generation: usize,
     barrier: &'a Barrier,

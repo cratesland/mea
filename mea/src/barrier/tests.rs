@@ -18,48 +18,38 @@ use tokio_test::task::spawn;
 
 use crate::barrier::Barrier;
 
-struct IsSend<T: Send>(T);
-
-#[test]
-fn barrier_future_is_send() {
-    let b = Barrier::new(0);
-    let _ = IsSend(b.wait());
-}
-
 #[test]
 fn zero_does_not_block() {
     let b = Barrier::new(0);
-
     {
-        let mut w = spawn(b.wait());
-        let wr = assert_ready!(w.poll());
-        assert!(wr);
+        let mut f = spawn(b.wait());
+        let leader = assert_ready!(f.poll());
+        assert!(leader);
     }
     {
-        let mut w = spawn(b.wait());
-        let wr = assert_ready!(w.poll());
-        assert!(wr);
+        let mut f = spawn(b.wait());
+        let leader = assert_ready!(f.poll());
+        assert!(leader);
     }
 }
 
 #[test]
 fn single() {
     let b = Barrier::new(1);
-
     {
-        let mut w = spawn(b.wait());
-        let wr = assert_ready!(w.poll());
-        assert!(wr);
+        let mut f = spawn(b.wait());
+        let leader = assert_ready!(f.poll());
+        assert!(leader);
     }
     {
-        let mut w = spawn(b.wait());
-        let wr = assert_ready!(w.poll());
-        assert!(wr);
+        let mut f = spawn(b.wait());
+        let leader = assert_ready!(f.poll());
+        assert!(leader);
     }
     {
-        let mut w = spawn(b.wait());
-        let wr = assert_ready!(w.poll());
-        assert!(wr);
+        let mut f = spawn(b.wait());
+        let leader = assert_ready!(f.poll());
+        assert!(leader);
     }
 }
 
@@ -67,15 +57,15 @@ fn single() {
 fn tango() {
     let b = Barrier::new(2);
 
-    let mut w1 = spawn(b.wait());
-    assert_pending!(w1.poll());
+    let mut f1 = spawn(b.wait());
+    assert_pending!(f1.poll());
 
-    let mut w2 = spawn(b.wait());
-    let wr2 = assert_ready!(w2.poll());
-    let wr1 = assert_ready!(w1.poll());
+    let mut f2 = spawn(b.wait());
+    let f2_leader = assert_ready!(f2.poll());
+    let f1_leader = assert_ready!(f1.poll());
 
-    assert!(wr1 || wr2);
-    assert!(!(wr1 && wr2));
+    assert!(f1_leader || f2_leader);
+    assert!(!(f1_leader && f2_leader));
 }
 
 #[test]
@@ -85,20 +75,21 @@ fn lots() {
     for _ in 0..10 {
         let mut wait = Vec::new();
         for _ in 0..99 {
-            let mut w = spawn(b.wait());
-            assert_pending!(w.poll());
-            wait.push(w);
+            let mut f = spawn(b.wait());
+            assert_pending!(f.poll());
+            wait.push(f);
         }
-        for w in &mut wait {
-            assert_pending!(w.poll());
+
+        for f in &mut wait {
+            assert_pending!(f.poll());
         }
 
         // pass the barrier
-        let mut w = spawn(b.wait());
-        let mut found_leader = assert_ready!(w.poll());
-        for mut w in wait {
-            let wr = assert_ready!(w.poll());
-            if wr {
+        let mut f = spawn(b.wait());
+        let mut found_leader = assert_ready!(f.poll());
+        for mut f in wait {
+            let leader = assert_ready!(f.poll());
+            if leader {
                 assert!(!found_leader);
                 found_leader = true;
             }

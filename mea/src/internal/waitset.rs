@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::task::Context;
+use std::task::Waker;
+
 use slab::Slab;
-use std::task::{Context, Waker};
 
 #[derive(Debug)]
 pub(crate) struct WaitSet {
