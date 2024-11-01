@@ -18,5 +18,11 @@ pub(crate) use countdown::*;
 mod mutex;
 pub(crate) use mutex::*;
 
+mod semaphore;
+pub(crate) use semaphore::*;
+
+mod waitlist;
+pub(crate) use waitlist::*;
+
 mod waitset;
 pub(crate) use waitset::*;
