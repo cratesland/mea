@@ -15,22 +15,20 @@
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 use std::task::Context;
-use std::task::Waker;
 
-use crate::internal::Mutex;
-use slab::Slab;
+use crate::internal::{Mutex, WaitSet};
 
 #[derive(Debug)]
 pub(crate) struct CountdownState {
     state: AtomicU32,
-    waiters: Mutex<Slab<Waker>>,
+    waiters: Mutex<WaitSet>,
 }
 
 impl CountdownState {
     pub(crate) const fn new(count: u32) -> Self {
         Self {
             state: AtomicU32::new(count),
-            waiters: Mutex::new(Slab::new()),
+            waiters: Mutex::new(WaitSet::new()),
         }
     }
 
@@ -59,19 +57,13 @@ impl CountdownState {
     pub(crate) fn reset(&self, count: u32) {
         let mut waiters = self.waiters.lock();
         self.state.store(count, Ordering::Release);
-        let waiters = std::mem::take(&mut *waiters);
-        for (_, waker) in waiters.into_iter() {
-            waker.wake();
-        }
+        waiters.wake_all();
     }
 
     /// Drain and wake up all waiters.
     pub(crate) fn wake_all(&self) {
         let mut waiters = self.waiters.lock();
-        let waiters = std::mem::take(&mut *waiters);
-        for (_, waker) in waiters.into_iter() {
-            waker.wake();
-        }
+        waiters.wake_all();
     }
 
     /// Registers a waker to be woken up when the countdown reaches zero.
@@ -80,17 +72,7 @@ impl CountdownState {
     /// a value previously returned by this method.
     pub(crate) fn register_waker(&self, idx: &mut Option<usize>, cx: &mut Context<'_>) {
         let mut waiters = self.waiters.lock();
-        match *idx {
-            None => {
-                let key = waiters.insert(cx.waker().clone());
-                *idx = Some(key);
-            }
-            Some(key) => {
-                if !waiters[key].will_wake(cx.waker()) {
-                    waiters[key] = cx.waker().clone();
-                }
-            }
-        }
+        waiters.register_waker(idx, cx);
     }
 
     /// Returns `Ok(())` if the counter is zero, otherwise returns `Err(s)` where `s` is the current

@@ -12,21 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::internal::{Mutex, WaitSet};
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
 
-use crate::internal::{CountdownState, Mutex};
-
 #[cfg(test)]
 mod tests;
 
 pub struct Barrier {
     n: u32,
-    g: Mutex<usize>, // generation
-    state: CountdownState,
+    state: Mutex<BarrierState>,
+}
+
+struct BarrierState {
+    arrived: u32,
+    generation: usize,
+    waiters: WaitSet,
 }
 
 impl fmt::Debug for Barrier {
@@ -42,10 +46,14 @@ impl Barrier {
         // std::sync::Barrier works with n = 0 the same as n = 1,
         // where every .wait() immediately unblocks, so we adopt that here as well.
         let n = n.max(1);
+
         Self {
             n,
-            g: Mutex::new(0),
-            state: CountdownState::new(n),
+            state: Mutex::new(BarrierState {
+                arrived: 0,
+                generation: 0,
+                waiters: WaitSet::with_capacity(n as usize),
+            }),
         }
     }
 
@@ -53,21 +61,27 @@ impl Barrier {
     ///
     /// The output of the future is a bool indicates whether this waiter is the leader (last one).
     pub async fn wait(&self) -> bool {
-        if self.state.decrement(1) {
-            let mut g = self.g.lock();
-            *g += 1;
-            self.state.reset(self.n);
-            return true;
-        }
+        let generation = {
+            let mut state = self.state.lock();
+            let generation = state.generation;
+            state.arrived += 1;
 
-        let fut = {
-            let g = self.g.lock();
-            BarrierWait {
-                idx: None,
-                generation: *g,
-                barrier: self,
+            // the last arriver is the leader;
+            // wake up other waiters, increment the generation, and return
+            if state.arrived == self.n {
+                state.arrived = 0;
+                state.generation += 1;
+                state.waiters.wake_all();
+                return true;
             }
-            // drop(g);
+
+            generation
+        };
+
+        let fut = BarrierWait {
+            idx: None,
+            generation,
+            barrier: self,
         };
         fut.await;
         false
@@ -99,11 +113,11 @@ impl Future for BarrierWait<'_> {
             barrier,
         } = self.get_mut();
 
-        let g = barrier.g.lock();
-        if *generation < *g {
+        let mut state = barrier.state.lock();
+        if *generation < state.generation {
             Poll::Ready(())
         } else {
-            barrier.state.register_waker(idx, cx);
+            state.waiters.register_waker(idx, cx);
             Poll::Pending
         }
     }
