@@ -1,25 +1,37 @@
+// Copyright 2024 tison <wander4096@gmail.com>
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use slab::Slab;
-use std::ptr;
-use std::task::{Context, RawWaker, RawWakerVTable, Waker};
 
 /// A guarded linked list.
 ///
 /// * `guard`'s `next` points to the first node (regular head).
 /// * `guard`'s `prev` points to the last node (regular tail).
 #[derive(Debug)]
-pub(crate) struct WaitList {
+pub(crate) struct WaitList<T> {
     guard: usize,
-    nodes: Slab<Node>,
+    nodes: Slab<Node<T>>,
 }
 
 #[derive(Debug)]
-struct Node {
+struct Node<T> {
     prev: usize,
     next: usize,
-    waker: Waker,
+    stat: Option<T>,
 }
 
-impl WaitList {
+impl<T> WaitList<T> {
     pub(crate) fn new() -> Self {
         let mut nodes = Slab::new();
         let first = nodes.vacant_entry();
@@ -27,20 +39,25 @@ impl WaitList {
         first.insert(Node {
             prev: guard,
             next: guard,
-            waker: noop(),
+            stat: None,
         });
         Self { guard, nodes }
     }
 
-    /// Registers a waker to the tail of the wait list.
-    pub(crate) fn register_waker(&mut self, idx: &mut Option<usize>, cx: &mut Context<'_>) {
+    /// Registers a waiter to the tail of the wait list.
+    pub(crate) fn register_waiter(
+        &mut self,
+        idx: &mut Option<usize>,
+        f: impl FnOnce(Option<&T>) -> Option<T>,
+    ) {
         match *idx {
             None => {
+                let stat = f(None);
                 let prev_tail = self.nodes[self.guard].prev;
                 let new_node = Node {
                     prev: prev_tail,
                     next: self.guard,
-                    waker: cx.waker().clone(),
+                    stat,
                 };
                 let new_key = self.nodes.insert(new_node);
                 self.nodes[self.guard].prev = new_key;
@@ -48,39 +65,55 @@ impl WaitList {
             }
             Some(key) => {
                 debug_assert_ne!(key, self.guard);
-                if !self.nodes[key].waker.will_wake(cx.waker()) {
-                    self.nodes[key].waker = cx.waker().clone();
+                if let Some(stat) = f(self.nodes[key].stat.as_ref()) {
+                    self.nodes[key].stat = Some(stat);
                 }
             }
         }
     }
 
     /// Removes a previously registered waker from the wait list.
-    pub(crate) fn remove_waker(&mut self, idx: usize) -> Node {
+    pub(crate) fn remove_waiter(
+        &mut self,
+        idx: usize,
+        f: impl FnOnce(&mut T) -> bool,
+    ) -> Option<&mut T> {
         debug_assert_ne!(idx, self.guard);
-        let prev = self.nodes[idx].prev;
-        let next = self.nodes[idx].next;
-        self.nodes[prev].next = next;
-        self.nodes[next].prev = prev;
-        self.nodes.remove(idx)
-    }
+        // SAFETY: `idx` is a valid key + non-guard node always has `Some(stat)`
+        fn retrieve_stat<T>(node: &mut Node<T>) -> &mut T {
+            node.stat.as_mut().unwrap()
+        }
 
-    /// Wakes up the first waiter in the list.
-    pub(crate) fn wake_first(&mut self) {
-        let first = self.nodes[self.guard].next;
-        if first != self.guard {
-            let first = self.remove_waker(first);
-            first.waker.wake();
+        if f(retrieve_stat(&mut self.nodes[idx])) {
+            let prev = self.nodes[idx].prev;
+            let next = self.nodes[idx].next;
+            self.nodes[prev].next = next;
+            self.nodes[next].prev = prev;
+            Some(retrieve_stat(&mut self.nodes[idx]))
+        } else {
+            None
         }
     }
-}
 
-// TODO(tisonkun): Use the 'noop_waker' feature once it is stabilized
-// @see https://github.com/rust-lang/rust/issues/98286
-const fn noop() -> Waker {
-    const NOOP: RawWaker = {
-        const VTABLE: RawWakerVTable = RawWakerVTable::new(|_| NOOP, |_| {}, |_| {}, |_| {});
-        RawWaker::new(ptr::null(), &VTABLE)
-    };
-    unsafe { Waker::from_raw(NOOP) }
+    /// Removes the first waiter from the wait list.
+    pub(crate) fn remove_first_waiter(&mut self, f: impl FnOnce(&mut T) -> bool) -> Option<&mut T> {
+        let first = self.nodes[self.guard].next;
+        if first != self.guard {
+            self.remove_waiter(first, f)
+        } else {
+            None
+        }
+    }
+
+    /// Returns `true` if the wait list is empty.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.nodes[self.guard].next == self.guard
+    }
+
+    pub(crate) fn with_mut(&mut self, idx: usize, drop: impl FnOnce(&mut T) -> bool) {
+        let node = &mut self.nodes[idx];
+        if drop(node.stat.as_mut().unwrap()) {
+            self.nodes.remove(idx);
+        }
+    }
 }
