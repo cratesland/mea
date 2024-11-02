@@ -62,6 +62,7 @@ impl<T> WaitList<T> {
                 let new_key = self.nodes.insert(new_node);
                 self.nodes[self.guard].prev = new_key;
                 self.nodes[prev_tail].next = new_key;
+                *idx = Some(new_key);
             }
             Some(key) => {
                 debug_assert_ne!(key, self.guard);

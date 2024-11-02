@@ -76,10 +76,11 @@ fn forget() {
 async fn stress_test() {
     let sem = Arc::new(Semaphore::new(5));
     let mut join_handles = Vec::new();
-    for _ in 0..1000 {
+    for i in 0..100 {
         let sem_clone = sem.clone();
         join_handles.push(tokio::spawn(async move {
             let _p = sem_clone.acquire(1).await;
+            tokio::time::sleep(std::time::Duration::from_millis(100 - i)).await;
         }));
     }
     for j in join_handles {
