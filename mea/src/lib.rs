@@ -18,6 +18,8 @@ mod internal;
 
 pub mod barrier;
 pub mod latch;
+pub mod mutex;
+pub mod semaphore;
 pub mod waitgroup;
 
 #[cfg(test)]

@@ -39,9 +39,8 @@ impl WaitSet {
 
     /// Drain and wake up all waiters.
     pub(crate) fn wake_all(&mut self) {
-        let waiters = std::mem::take(&mut self.waiters);
-        for (_, waker) in waiters.into_iter() {
-            waker.wake();
+        for w in self.waiters.drain() {
+            w.wake();
         }
     }
 
