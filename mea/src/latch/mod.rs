@@ -29,8 +29,6 @@ mod tests;
 /// The count can be decremented by calling [`count_down()`] or [`arrive()`]. Once the count
 /// reaches zero, all waiting tasks are unblocked.
 ///
-/// This is similar to Java's CountDownLatch but with async/await support.
-///
 /// # Examples
 ///
 /// ```

@@ -13,47 +13,32 @@
 # limitations under the License.
 
 [package]
-authors = ["tison <wander4096@gmail.com>"]
+name = "mea"
+version = "0.0.5"
+
 categories = ["async", "synchronization", "waitgroup", "concurrency", "no-std"]
-description = """
-A runtime-agnostic library providing essential synchronization primitives for asynchronous Rust programming.
-Includes Barrier, Latch, Mutex, Semaphore, and WaitGroup implementations.
-"""
+description = "A runtime-agnostic library providing essential synchronization primitives for asynchronous Rust programming."
 documentation = "https://docs.rs/mea"
 keywords = ["async", "concurrency", "synchronization", "waitgroup", "mutex"]
-name = "mea"
-readme = "README.md"
-version = "0.0.5"
 
 edition.workspace = true
 homepage.workspace = true
 license.workspace = true
+readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
-targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
-slab = { version = "0.4.9", default-features = false }
+slab = { version = "0.4.9" }
 
 [dev-dependencies]
 pollster = { version = "0.4.0" }
 tokio = { version = "1.41.0", features = ["full"] }
 tokio-test = { version = "0.4.4" }
 
-[features]
-default = []
-# Enable additional runtime-specific optimizations
-tokio = []
-
 [lints]
 workspace = true
-
-[package.metadata.playground]
-features = ["tokio"]
-
-[badges]
-maintenance = { status = "actively-developed" }

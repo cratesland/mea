@@ -17,12 +17,14 @@
 
 //! # Mea - Make Easy Async
 //!
-//! `mea` is a runtime-agnostic library providing essential synchronization primitives for asynchronous Rust programming.
-//! The library offers a collection of well-tested, efficient synchronization tools that work with any async runtime.
+//! `mea` is a runtime-agnostic library providing essential synchronization primitives for
+//! asynchronous Rust programming. The library offers a collection of well-tested, efficient
+//! synchronization tools that work with any async runtime.
 //!
 //! ## Features
 //!
-//! * [`Barrier`] - A synchronization point where multiple tasks can wait until all participants arrive
+//! * [`Barrier`] - A synchronization point where multiple tasks can wait until all participants
+//!   arrive
 //! * [`Latch`] - A single-use barrier that allows one or more tasks to wait until a signal is given
 //! * [`Mutex`] - A mutual exclusion primitive for protecting shared data
 //! * [`Semaphore`] - A synchronization primitive that controls access to a shared resource
@@ -30,13 +32,21 @@
 //!
 //! ## Runtime Agnostic
 //!
-//! All synchronization primitives in this library are runtime-agnostic, meaning they can be used with any
-//! async runtime like Tokio, async-std, or others. This makes the library highly versatile and portable.
+//! All synchronization primitives in this library are runtime-agnostic, meaning they can be used
+//! with any async runtime like Tokio, async-std, or others. This makes the library highly versatile
+//! and portable.
 //!
 //! ## Thread Safety
 //!
-//! All types in this library implement `Send` and `Sync`, making them safe to share across thread boundaries.
-//! This is essential for concurrent programming where data needs to be accessed from multiple threads.
+//! All types in this library implement `Send` and `Sync`, making them safe to share across thread
+//! boundaries. This is essential for concurrent programming where data needs to be accessed from
+//! multiple threads.
+//!
+//! [`Barrier`]: barrier::Barrier
+//! [`Latch`]: latch::Latch
+//! [`Mutex`]: mutex::Mutex
+//! [`Semaphore`]: semaphore::Semaphore
+//! [`WaitGroup`]: waitgroup::WaitGroup
 
 mod internal;
 
@@ -49,8 +59,9 @@ mod internal;
 /// # Examples
 ///
 /// ```
-/// use mea::barrier::Barrier;
 /// use std::sync::Arc;
+///
+/// use mea::barrier::Barrier;
 ///
 /// async fn example() {
 ///     let barrier = Arc::new(Barrier::new(3));
@@ -77,8 +88,9 @@ pub mod barrier;
 /// # Examples
 ///
 /// ```
-/// use mea::latch::Latch;
 /// use std::sync::Arc;
+///
+/// use mea::latch::Latch;
 ///
 /// async fn example() {
 ///     let latch = Arc::new(Latch::new(3));
@@ -109,8 +121,9 @@ pub mod latch;
 /// # Examples
 ///
 /// ```
-/// use mea::mutex::Mutex;
 /// use std::sync::Arc;
+///
+/// use mea::mutex::Mutex;
 ///
 /// async fn example() {
 ///     let mutex = Arc::new(Mutex::new(0));
@@ -137,8 +150,9 @@ pub mod mutex;
 /// # Examples
 ///
 /// ```
-/// use mea::semaphore::Semaphore;
 /// use std::sync::Arc;
+///
+/// use mea::semaphore::Semaphore;
 ///
 /// struct ConnectionPool {
 ///     sem: Arc<Semaphore>,
@@ -170,8 +184,9 @@ pub mod semaphore;
 /// # Examples
 ///
 /// ```
-/// use mea::waitgroup::WaitGroup;
 /// use std::time::Duration;
+///
+/// use mea::waitgroup::WaitGroup;
 ///
 /// async fn example() {
 ///     let wg = WaitGroup::new();

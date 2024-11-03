@@ -31,8 +31,6 @@ mod tests;
 /// [`clone()`] to create a new worker handle for each task, and can then wait
 /// for all tasks to complete by calling `.await` on the WaitGroup.
 ///
-/// This is similar to Go's `sync.WaitGroup`.
-///
 /// # Examples
 ///
 /// ```
@@ -51,7 +49,8 @@ mod tests;
 ///             // Simulate some work
 ///             tokio::time::sleep(Duration::from_millis(100)).await;
 ///             println!("Task {} completed", i);
-///             // wg is automatically decremented when dropped
+///             // Wait until all tasks have finished
+///             wg.await
 ///         }));
 ///     }
 ///
@@ -74,19 +73,13 @@ pub struct WaitGroup {
 }
 
 impl Default for WaitGroup {
-    /// Creates a new `WaitGroup` with an initial count of 1.
-    ///
-    /// This is equivalent to calling [`WaitGroup::new()`].
     fn default() -> Self {
         Self::new()
     }
 }
 
 impl WaitGroup {
-    /// Creates a new `WaitGroup` with an initial count of 1.
-    ///
-    /// The initial count of 1 ensures that calling `.await` on a newly created
-    /// WaitGroup will wait for at least one task (created via [`clone()`]) to complete.
+    /// Creates a new `WaitGroup`.
     ///
     /// # Examples
     ///
@@ -95,8 +88,6 @@ impl WaitGroup {
     ///
     /// let wg = WaitGroup::new();
     /// ```
-    ///
-    /// [`clone()`]: WaitGroup::clone
     pub fn new() -> Self {
         Self {
             state: Arc::new(CountdownState::new(1)),
@@ -109,26 +100,6 @@ impl Clone for WaitGroup {
     ///
     /// This increments the WaitGroup counter. The counter will be decremented
     /// when the new handle is dropped.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use mea::waitgroup::WaitGroup;
-    ///
-    /// async fn example() {
-    ///     let wg = WaitGroup::new();
-    ///
-    ///     // Create a new worker handle
-    ///     let worker = wg.clone();
-    ///     tokio::spawn(async move {
-    ///         // Do some work
-    ///         // worker is automatically decremented when dropped
-    ///     });
-    ///
-    ///     // Wait for the worker to complete
-    ///     wg.await;
-    /// }
-    /// ```
     fn clone(&self) -> Self {
         let sync = self.state.clone();
         let mut cnt = sync.state();
