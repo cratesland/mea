@@ -22,125 +22,18 @@ Mea (Make Easy Async) is a runtime-agnostic library providing essential synchron
 
 ## Features
 
-* **Barrier** - A synchronization point where multiple tasks can wait until all participants arrive
-* **Latch** - A single-use barrier that allows one or more tasks to wait until a signal is given
-* **Mutex** - A mutual exclusion primitive for protecting shared data
-* **Semaphore** - A synchronization primitive that controls access to a shared resource
-* **WaitGroup** - A synchronization primitive that allows waiting for multiple tasks to complete
+* [**Barrier**](https://docs.rs/mea/*/mea/barrier/struct.Barrier.html) - A synchronization point where multiple tasks can wait until all participants arrive
+* [**Latch**](https://docs.rs/mea/*/mea/latch/struct.Latch.html) - A single-use barrier that allows one or more tasks to wait until a signal is given
+* [**Mutex**](https://docs.rs/mea/*/mea/mutex/struct.Mutex.html) - A mutual exclusion primitive for protecting shared data
+* [**Semaphore**](https://docs.rs/mea/*/mea/semaphore/struct.Semaphore.html) - A synchronization primitive that controls access to a shared resource
+* [**WaitGroup**](https://docs.rs/mea/*/mea/waitgroup/struct.WaitGroup.html) - A synchronization primitive that allows waiting for multiple tasks to complete
 
 ## Installation
 
-Add this to your `Cargo.toml`:
+Add the dependency to your `Cargo.toml` via:
 
-```toml
-[dependencies]
-mea = "0.0.5"
-```
-
-## Usage Examples
-
-### Barrier
-
-```rust
-use mea::barrier::Barrier;
-use std::sync::Arc;
-
-async fn example() {
-    let barrier = Arc::new(Barrier::new(3));
-    let mut handles = Vec::new();
-
-    for i in 0..3 {
-        let barrier = barrier.clone();
-        handles.push(tokio::spawn(async move {
-            println!("Task {} before barrier", i);
-            let is_leader = barrier.wait().await;
-            println!("Task {} after barrier (leader: {})", i, is_leader);
-        }));
-    }
-
-    for handle in handles {
-        handle.await.unwrap();
-    }
-}
-```
-
-### WaitGroup
-
-```rust
-use mea::waitgroup::WaitGroup;
-use std::time::Duration;
-
-async fn example() {
-    let wg = WaitGroup::new();
-    let mut handles = Vec::new();
-
-    for i in 0..3 {
-        let wg = wg.clone();
-        handles.push(tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            println!("Task {} completed", i);
-            // Wait until all tasks have finished
-            wg.await
-        }));
-    }
-
-    // Wait for all tasks to complete
-    wg.await;
-    println!("All tasks completed");
-}
-```
-
-### Mutex
-
-```rust
-use mea::mutex::Mutex;
-use std::sync::Arc;
-
-async fn example() {
-    let mutex = Arc::new(Mutex::new(0));
-    let mut handles = Vec::new();
-
-    for i in 0..3 {
-        let mutex = mutex.clone();
-        handles.push(tokio::spawn(async move {
-            let mut lock = mutex.lock().await;
-            *lock += i;
-        }));
-    }
-
-    for handle in handles {
-        handle.await.unwrap();
-    }
-
-    let final_value = mutex.lock().await;
-    assert_eq!(*final_value, 3); // 0 + 1 + 2
-}
-```
-
-### Semaphore
-
-```rust
-use mea::semaphore::Semaphore;
-use std::sync::Arc;
-
-struct ConnectionPool {
-    sem: Arc<Semaphore>,
-}
-
-impl ConnectionPool {
-    fn new(size: u32) -> Self {
-        Self {
-            sem: Arc::new(Semaphore::new(size)),
-        }
-    }
-
-    async fn get_connection(&self) -> Connection {
-        let _permit = self.sem.acquire(1).await;
-        Connection {} // Acquire and return a connection
-    }
-}
-
-struct Connection {}
+```shell
+cargo add mea
 ```
 
 ## Runtime Agnostic
