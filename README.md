@@ -79,7 +79,8 @@ async fn example() {
         handles.push(tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(100)).await;
             println!("Task {} completed", i);
-            // wg is automatically decremented when dropped
+            // Wait until all tasks have finished
+            wg.await
         }));
     }
 
