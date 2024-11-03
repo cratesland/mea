@@ -12,6 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! A countdown latch that allows one or more tasks to wait until a set of operations completes.
+//!
+//! Unlike a barrier, a latch's count can only decrease and cannot be reused once it reaches zero.
+//! This makes it ideal for scenarios where you need to wait for a specific number of events or
+//! operations to complete.
+//!
+//! # Examples
+//!
+//! ```
+//! use std::sync::Arc;
+//!
+//! use mea::latch::Latch;
+//!
+//! async fn example() {
+//!     let latch = Arc::new(Latch::new(3));
+//!     let mut handles = Vec::new();
+//!
+//!     for i in 0..3 {
+//!         let latch = latch.clone();
+//!         handles.push(tokio::spawn(async move {
+//!             println!("Task {} starting", i);
+//!             // Simulate some work
+//!             latch.count_down(); // Signal completion
+//!         }));
+//!     }
+//!
+//!     // Wait for all tasks to complete
+//!     latch.wait().await;
+//!     println!("All tasks completed");
+//! }
+//! ```
+
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;

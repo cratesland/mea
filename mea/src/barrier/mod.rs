@@ -12,6 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! A synchronization primitive that enables multiple tasks to wait for each other.
+//!
+//! The barrier ensures that no task proceeds past a certain point until all tasks have reached it.
+//! This is useful for scenarios where multiple tasks need to proceed together after reaching a
+//! certain point in their execution.
+//!
+//! # Examples
+//!
+//! ```
+//! use std::sync::Arc;
+//!
+//! use mea::barrier::Barrier;
+//!
+//! async fn example() {
+//!     let barrier = Arc::new(Barrier::new(3));
+//!     let mut handles = Vec::new();
+//!
+//!     for i in 0..3 {
+//!         let barrier = barrier.clone();
+//!         handles.push(tokio::spawn(async move {
+//!             println!("Task {} before barrier", i);
+//!             let is_leader = barrier.wait().await;
+//!             println!("Task {} after barrier (leader: {})", i, is_leader);
+//!         }));
+//!     }
+//! }
+//! ```
+
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;

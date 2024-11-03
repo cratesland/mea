@@ -12,6 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! A synchronization primitive for waiting on multiple tasks to complete.
+//!
+//! Similar to Go's WaitGroup, this type allows a task to wait for multiple other
+//! tasks to finish. Each task holds a handle to the WaitGroup, and the main task
+//! can wait for all handles to be dropped before proceeding.
+//!
+//! # Examples
+//!
+//! ```
+//! use std::time::Duration;
+//!
+//! use mea::waitgroup::WaitGroup;
+//!
+//! async fn example() {
+//!     let wg = WaitGroup::new();
+//!     let mut handles = Vec::new();
+//!
+//!     for i in 0..3 {
+//!         let wg = wg.clone();
+//!         handles.push(tokio::spawn(async move {
+//!             println!("Task {} starting", i);
+//!             tokio::time::sleep(Duration::from_millis(100)).await;
+//!             // wg is automatically decremented when dropped
+//!         }));
+//!     }
+//!
+//!     // Wait for all tasks to complete
+//!     wg.await;
+//!     println!("All tasks completed");
+//! }
+//! ```
+
 use std::fmt;
 use std::future::Future;
 use std::future::IntoFuture;

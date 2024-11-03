@@ -12,6 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! An async mutex for protecting shared data.
+//!
+//! Unlike a standard mutex, this implementation is designed to work with async/await,
+//! ensuring tasks yield properly when the lock is contended. This makes it suitable
+//! for protecting shared resources in async code.
+//!
+//! # Examples
+//!
+//! ```
+//! use std::sync::Arc;
+//!
+//! use mea::mutex::Mutex;
+//!
+//! async fn example() {
+//!     let mutex = Arc::new(Mutex::new(0));
+//!     let mut handles = Vec::new();
+//!
+//!     for i in 0..3 {
+//!         let mutex = mutex.clone();
+//!         handles.push(tokio::spawn(async move {
+//!             let mut lock = mutex.lock().await;
+//!             *lock += i;
+//!         }));
+//!     }
+//! }
+//! ```
+
 use std::cell::UnsafeCell;
 use std::fmt;
 use std::ops::Deref;
@@ -147,7 +174,8 @@ impl<T: ?Sized> Mutex<T> {
     /// use mea::mutex::Mutex;
     ///
     /// let mutex = Mutex::new(1);
-    /// match mutex.try_lock() {
+    /// let guard = mutex.try_lock();
+    /// match guard {
     ///     Some(mut guard) => {
     ///         *guard += 1;
     ///     }

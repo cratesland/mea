@@ -12,6 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! A counting semaphore for controlling access to a pool of resources.
+//!
+//! Semaphores can be used to limit the number of tasks that can access a resource
+//! simultaneously. This is particularly useful for implementing connection pools,
+//! rate limiters, or any scenario where you need to control concurrent access to
+//! limited resources.
+//!
+//! # Examples
+//!
+//! ```
+//! use std::sync::Arc;
+//!
+//! use mea::semaphore::Semaphore;
+//!
+//! struct ConnectionPool {
+//!     sem: Arc<Semaphore>,
+//! }
+//!
+//! impl ConnectionPool {
+//!     fn new(size: u32) -> Self {
+//!         Self {
+//!             sem: Arc::new(Semaphore::new(size)),
+//!         }
+//!     }
+//!
+//!     async fn get_connection(&self) -> Connection {
+//!         let _permit = self.sem.acquire(1).await;
+//!         Connection {} // Acquire and return a connection
+//!     }
+//! }
+//!
+//! struct Connection {}
+//! ```
+
 use crate::internal;
 
 #[cfg(test)]
