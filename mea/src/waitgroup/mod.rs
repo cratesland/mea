@@ -25,23 +25,78 @@ use crate::internal::CountdownState;
 #[cfg(test)]
 mod tests;
 
+/// A synchronization primitive that allows waiting for multiple tasks to complete.
+///
+/// A WaitGroup waits for a collection of tasks to finish. The main task calls
+/// [`clone()`] to create a new worker handle for each task, and can then wait
+/// for all tasks to complete by calling `.await` on the WaitGroup.
+///
+/// This is similar to Go's `sync.WaitGroup`.
+///
+/// # Examples
+///
+/// ```
+/// use std::time::Duration;
+///
+/// use mea::waitgroup::WaitGroup;
+///
+/// async fn example() {
+///     let wg = WaitGroup::new();
+///     let mut handles = Vec::new();
+///
+///     // Spawn multiple tasks
+///     for i in 0..3 {
+///         let wg = wg.clone(); // Create a new worker handle
+///         handles.push(tokio::spawn(async move {
+///             // Simulate some work
+///             tokio::time::sleep(Duration::from_millis(100)).await;
+///             println!("Task {} completed", i);
+///             // wg is automatically decremented when dropped
+///         }));
+///     }
+///
+///     // Wait for all tasks to complete
+///     wg.await;
+///
+///     // All tasks have finished
+///     println!("All tasks completed");
+///
+///     for handle in handles {
+///         handle.await.unwrap();
+///     }
+/// }
+/// ```
+///
+/// [`clone()`]: WaitGroup::clone
+#[derive(Debug)]
 pub struct WaitGroup {
     state: Arc<CountdownState>,
 }
 
-impl fmt::Debug for WaitGroup {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("WaitGroup").finish_non_exhaustive()
-    }
-}
-
 impl Default for WaitGroup {
+    /// Creates a new `WaitGroup` with an initial count of 1.
+    ///
+    /// This is equivalent to calling [`WaitGroup::new()`].
     fn default() -> Self {
         Self::new()
     }
 }
 
 impl WaitGroup {
+    /// Creates a new `WaitGroup` with an initial count of 1.
+    ///
+    /// The initial count of 1 ensures that calling `.await` on a newly created
+    /// WaitGroup will wait for at least one task (created via [`clone()`]) to complete.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mea::waitgroup::WaitGroup;
+    ///
+    /// let wg = WaitGroup::new();
+    /// ```
+    ///
+    /// [`clone()`]: WaitGroup::clone
     pub fn new() -> Self {
         Self {
             state: Arc::new(CountdownState::new(1)),
@@ -50,6 +105,30 @@ impl WaitGroup {
 }
 
 impl Clone for WaitGroup {
+    /// Creates a new worker handle for the WaitGroup.
+    ///
+    /// This increments the WaitGroup counter. The counter will be decremented
+    /// when the new handle is dropped.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mea::waitgroup::WaitGroup;
+    ///
+    /// async fn example() {
+    ///     let wg = WaitGroup::new();
+    ///
+    ///     // Create a new worker handle
+    ///     let worker = wg.clone();
+    ///     tokio::spawn(async move {
+    ///         // Do some work
+    ///         // worker is automatically decremented when dropped
+    ///     });
+    ///
+    ///     // Wait for the worker to complete
+    ///     wg.await;
+    /// }
+    /// ```
     fn clone(&self) -> Self {
         let sync = self.state.clone();
         let mut cnt = sync.state();
@@ -73,9 +152,12 @@ impl Drop for WaitGroup {
 
 impl IntoFuture for WaitGroup {
     type Output = ();
-
     type IntoFuture = Wait;
 
+    /// Converts the WaitGroup into a future that completes when all tasks finish.
+    ///
+    /// This allows using `.await` directly on a WaitGroup to wait for all tasks
+    /// to complete.
     fn into_future(self) -> Self::IntoFuture {
         let state = self.state.clone();
         drop(self);
@@ -83,6 +165,9 @@ impl IntoFuture for WaitGroup {
     }
 }
 
+/// A future that completes when all tasks in a WaitGroup have finished.
+///
+/// This type is created by awaiting on a [`WaitGroup`].
 #[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct Wait {
     idx: Option<usize>,

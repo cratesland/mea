@@ -24,6 +24,42 @@ use crate::internal::WaitSet;
 #[cfg(test)]
 mod tests;
 
+/// A synchronization primitive for multiple tasks that need to wait for each other.
+///
+/// A barrier enables multiple tasks to synchronize the beginning of some computation.
+/// When a barrier is created, it is initialized with a count of the number of tasks
+/// that will synchronize on the barrier. Each task can then call [`wait()`] on the
+/// barrier to indicate it is ready to proceed. The barrier ensures that no task
+/// proceeds past the barrier point until all tasks have made the call.
+///
+/// # Examples
+///
+/// ```
+/// use std::sync::Arc;
+///
+/// use mea::barrier::Barrier;
+///
+/// async fn example() {
+///     let barrier = Arc::new(Barrier::new(3));
+///     let mut handles = Vec::new();
+///
+///     for i in 0..3 {
+///         let barrier = barrier.clone();
+///         handles.push(tokio::spawn(async move {
+///             println!("Task {} before barrier", i);
+///             let is_leader = barrier.wait().await;
+///             println!("Task {} after barrier (leader: {})", i, is_leader);
+///         }));
+///     }
+///
+///     for handle in handles {
+///         handle.await.unwrap();
+///     }
+/// }
+/// ```
+///
+/// [`wait()`]: Barrier::wait
+#[derive(Debug)]
 pub struct Barrier {
     n: u32,
     state: Mutex<BarrierState>,
@@ -35,14 +71,32 @@ struct BarrierState {
     waiters: WaitSet,
 }
 
-impl fmt::Debug for Barrier {
+impl fmt::Debug for BarrierState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Barrier").finish_non_exhaustive()
+        f.debug_struct("BarrierState")
+            .field("arrived", &self.arrived)
+            .field("generation", &self.generation)
+            .field("waiters", &self.waiters)
+            .finish()
     }
 }
 
 impl Barrier {
-    /// Constructs a `Barrier` that can block a given number of tasks.
+    /// Creates a new barrier that can block the specified number of tasks.
+    ///
+    /// A barrier will block `n` tasks and release them all at once when the last task arrives.
+    ///
+    /// # Arguments
+    ///
+    /// * `n` - The number of tasks to wait for. If `n` is 0, it will be treated as 1.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mea::barrier::Barrier;
+    ///
+    /// let barrier = Barrier::new(3); // Creates a barrier for 3 tasks
+    /// ```
     pub fn new(n: u32) -> Self {
         // If n is 0, it's not clear what behavior the user wants.
         // std::sync::Barrier works with n = 0 the same as n = 1,
@@ -59,9 +113,39 @@ impl Barrier {
         }
     }
 
-    /// Returns a future that suspends the current task to wait until the counter reaches zero.
+    /// Waits for all tasks to reach this point.
     ///
-    /// The output of the future is a bool indicates whether this waiter is the leader (last one).
+    /// The barrier will block the current task until all `n` tasks have called `wait()`.
+    /// The last task to call `wait()` will be designated as the leader and receive `true`
+    /// as the return value. All other tasks will receive `false`.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Future` that resolves to:
+    /// * `true` if this task is the last (leader) task to arrive at the barrier
+    /// * `false` for all other tasks
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    ///
+    /// use mea::barrier::Barrier;
+    ///
+    /// async fn example() {
+    ///     let barrier = Arc::new(Barrier::new(2));
+    ///     let barrier2 = barrier.clone();
+    ///
+    ///     let handle = tokio::spawn(async move {
+    ///         let is_leader = barrier2.wait().await;
+    ///         println!("Task 1: leader = {}", is_leader);
+    ///     });
+    ///
+    ///     let is_leader = barrier.wait().await;
+    ///     println!("Task 2: leader = {}", is_leader);
+    ///     handle.await.unwrap();
+    /// }
+    /// ```
     pub async fn wait(&self) -> bool {
         let generation = {
             let mut state = self.state.lock();
@@ -90,6 +174,9 @@ impl Barrier {
     }
 }
 
+/// A future returned by [`Barrier::wait()`].
+///
+/// This future will complete when all tasks have reached the barrier point.
 #[must_use = "futures do nothing unless you `.await` or poll them"]
 struct BarrierWait<'a> {
     idx: Option<usize>,

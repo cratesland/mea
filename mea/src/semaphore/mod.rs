@@ -17,35 +17,136 @@ use crate::internal;
 #[cfg(test)]
 mod tests;
 
+/// An async counting semaphore for controlling access to a set of resources.
+///
+/// A semaphore maintains a set of permits. Permits are used to synchronize access
+/// to a pool of resources. Each [`acquire`] call blocks until a permit is available,
+/// and then takes one permit. Each [`release`] call adds a new permit, potentially
+/// releasing a blocked acquirer.
+///
+/// Semaphores are often used to restrict the number of tasks that can access some
+/// (physical or logical) resource. For example, here is a class that uses a
+/// semaphore to control access to a pool of connections:
+///
+/// ```
+/// use std::sync::Arc;
+///
+/// use mea::semaphore::Semaphore;
+///
+/// struct Pool {
+///     sem: Arc<Semaphore>,
+///     // ... other fields for managing connections
+/// }
+///
+/// impl Pool {
+///     fn new(size: u32) -> Self {
+///         Self {
+///             sem: Arc::new(Semaphore::new(size)),
+///             // ... initialize other fields
+///         }
+///     }
+///
+///     async fn get_connection(&self) -> Connection {
+///         let _permit = self.sem.acquire(1).await;
+///         // ... acquire and return a connection
+///         Connection {}
+///     }
+/// }
+///
+/// // Dummy connection type for the example
+/// struct Connection {}
+/// ```
+///
+/// [`acquire`]: Semaphore::acquire
+/// [`release`]: Semaphore::release
 #[derive(Debug)]
 pub struct Semaphore {
     s: internal::Semaphore,
 }
 
 impl Semaphore {
-    /// Constructs a `Semaphore` initialized with the given permits.
+    /// Creates a new semaphore with the given number of permits.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mea::semaphore::Semaphore;
+    ///
+    /// let sem = Semaphore::new(5); // Creates a semaphore with 5 permits
+    /// ```
     pub fn new(permits: u32) -> Self {
         Self {
             s: internal::Semaphore::new(permits),
         }
     }
 
-    /// Returns the current number of permits available in this semaphore.
+    /// Returns the current number of permits available.
     ///
-    /// This method is typically used for debugging and testing purposes.
+    /// # Examples
+    ///
+    /// ```
+    /// use mea::semaphore::Semaphore;
+    ///
+    /// let sem = Semaphore::new(2);
+    /// assert_eq!(sem.available_permits(), 2);
+    ///
+    /// let permit = sem.try_acquire(1).unwrap();
+    /// assert_eq!(sem.available_permits(), 1);
+    /// ```
     pub fn available_permits(&self) -> u32 {
         self.s.available_permits()
     }
 
-    /// Decrease a semaphore's permits by a maximum of `n`.
+    /// Reduces the semaphore's permits by a maximum of `n`.
     ///
-    /// If there are insufficient permits, and it's not possible to reduce by `n`,
-    /// return the number of permits that were actually reduced.
+    /// Returns the actual number of permits that were reduced. This may be less
+    /// than `n` if there are insufficient permits available.
+    ///
+    /// This is useful when you want to permanently remove permits from the semaphore.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mea::semaphore::Semaphore;
+    ///
+    /// let sem = Semaphore::new(5);
+    /// assert_eq!(sem.forget(3), 3); // Removes 3 permits
+    /// assert_eq!(sem.available_permits(), 2);
+    ///
+    /// // Trying to forget more permits than available
+    /// assert_eq!(sem.forget(3), 2); // Only removes remaining 2 permits
+    /// assert_eq!(sem.available_permits(), 0);
+    /// ```
     pub fn forget(&self, n: u32) -> u32 {
         self.s.forget(n)
     }
 
-    /// Attempts to acquire `n` permits from this semaphore.
+    /// Attempts to acquire `n` permits from the semaphore without blocking.
+    ///
+    /// If the permits are successfully acquired, a [`SemaphorePermit`] is returned.
+    /// The permits will be automatically returned to the semaphore when the permit
+    /// is dropped, unless [`forget`] is called.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mea::semaphore::Semaphore;
+    ///
+    /// let sem = Semaphore::new(2);
+    ///
+    /// // First acquisition succeeds
+    /// let permit1 = sem.try_acquire(1).unwrap();
+    /// assert_eq!(sem.available_permits(), 1);
+    ///
+    /// // Second acquisition succeeds
+    /// let permit2 = sem.try_acquire(1).unwrap();
+    /// assert_eq!(sem.available_permits(), 0);
+    ///
+    /// // Third acquisition fails
+    /// assert!(sem.try_acquire(1).is_none());
+    /// ```
+    ///
+    /// [`forget`]: SemaphorePermit::forget
     pub fn try_acquire(&self, permits: u32) -> Option<SemaphorePermit<'_>> {
         self.s
             .try_acquire(permits)
@@ -56,12 +157,51 @@ impl Semaphore {
     ///
     /// # Panics
     ///
-    /// This function panics if the semaphore would overflow.
+    /// Panics if adding the permits would cause the total number of permits to overflow.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mea::semaphore::Semaphore;
+    ///
+    /// let sem = Semaphore::new(0);
+    /// sem.release(2); // Adds 2 permits
+    /// assert_eq!(sem.available_permits(), 2);
+    /// ```
     pub fn release(&self, permits: u32) {
         self.s.release(permits);
     }
 
     /// Acquires `n` permits from the semaphore.
+    ///
+    /// If the permits are not immediately available, this method will wait until
+    /// they become available. Returns a [`SemaphorePermit`] that will release the
+    /// permits when dropped.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    ///
+    /// use mea::semaphore::Semaphore;
+    ///
+    /// async fn example() {
+    ///     let sem = Arc::new(Semaphore::new(2));
+    ///     let sem2 = sem.clone();
+    ///
+    ///     let handle = tokio::spawn(async move {
+    ///         let permit = sem2.acquire(1).await;
+    ///         // Do some work with the permit
+    ///         // Permit is automatically released when dropped
+    ///     });
+    ///
+    ///     let permit = sem.acquire(1).await;
+    ///     // Do some work with the permit
+    ///     drop(permit); // Explicitly release the permit
+    ///
+    ///     handle.await.unwrap();
+    /// }
+    /// ```
     pub async fn acquire(&self, permits: u32) -> SemaphorePermit<'_> {
         self.s.acquire(permits).await;
         SemaphorePermit { sem: self, permits }
@@ -70,10 +210,14 @@ impl Semaphore {
 
 /// A permit from the semaphore.
 ///
-/// This type is created by the [`acquire`] method.
+/// This type is created by the [`acquire`] and [`try_acquire`] methods on [`Semaphore`].
+/// When the permit is dropped, the permits will be returned to the semaphore unless
+/// [`forget`] is called.
 ///
-/// [`acquire`]: Semaphore::acquire()
-#[must_use]
+/// [`acquire`]: Semaphore::acquire
+/// [`try_acquire`]: Semaphore::try_acquire
+/// [`forget`]: SemaphorePermit::forget
+#[must_use = "permits are released immediately when dropped"]
 #[derive(Debug)]
 pub struct SemaphorePermit<'a> {
     sem: &'a Semaphore,
@@ -82,8 +226,9 @@ pub struct SemaphorePermit<'a> {
 
 impl SemaphorePermit<'_> {
     /// Forgets the permit **without** releasing it back to the semaphore.
-    /// This can be used to reduce the amount of permits available from a
-    /// semaphore.
+    ///
+    /// This can be used to permanently reduce the number of permits available
+    /// from a semaphore.
     ///
     /// # Examples
     ///
@@ -99,15 +244,25 @@ impl SemaphorePermit<'_> {
     ///     permit.forget();
     /// }
     ///
-    /// // Since we forgot the permit, available permits won't go back to its initial value
-    /// // even after the permit is dropped.
+    /// // Since we forgot the permit, available permits won't go back to
+    /// // its initial value even after the permit is dropped
     /// assert_eq!(sem.available_permits(), 5);
     /// ```
     pub fn forget(mut self) {
         self.permits = 0;
     }
 
-    /// Returns the number of permits held by `self`.
+    /// Returns the number of permits this permit holds.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mea::semaphore::Semaphore;
+    ///
+    /// let sem = Semaphore::new(5);
+    /// let permit = sem.try_acquire(3).unwrap();
+    /// assert_eq!(permit.permits(), 3);
+    /// ```
     pub fn permits(&self) -> u32 {
         self.permits
     }
