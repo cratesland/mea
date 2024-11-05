@@ -37,6 +37,24 @@
 //!             println!("Task {} after barrier (leader: {})", i, is_leader);
 //!         }));
 //!     }
+//!
+//!     for handle in std::mem::take(&mut handles) {
+//!        handle.await.unwrap();
+//!     }
+//!
+//!     // The barrier can be reused (generation is increased).
+//!     for i in 0..3 {
+//!         let barrier = barrier.clone();
+//!         handles.push(tokio::spawn(async move {
+//!             println!("Task {} before barrier", i);
+//!             let is_leader = barrier.wait().await;
+//!             println!("Task {} after barrier (leader: {})", i, is_leader);
+//!         }));
+//!     }
+//!
+//!     for handle in handles {
+//!        handle.await.unwrap();
+//!     }
 //! }
 //! ```
 
@@ -80,8 +98,22 @@ mod tests;
 ///         }));
 ///     }
 ///
+///     for handle in std::mem::take(&mut handles) {
+///        handle.await.unwrap();
+///     }
+///
+///     // The barrier can be reused (generation is increased).
+///     for i in 0..3 {
+///         let barrier = barrier.clone();
+///         handles.push(tokio::spawn(async move {
+///             println!("Task {} before barrier", i);
+///             let is_leader = barrier.wait().await;
+///             println!("Task {} after barrier (leader: {})", i, is_leader);
+///         }));
+///     }
+///
 ///     for handle in handles {
-///         handle.await.unwrap();
+///        handle.await.unwrap();
 ///     }
 /// }
 /// ```
@@ -104,8 +136,7 @@ impl fmt::Debug for BarrierState {
         f.debug_struct("BarrierState")
             .field("arrived", &self.arrived)
             .field("generation", &self.generation)
-            .field("waiters", &self.waiters)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -116,7 +147,7 @@ impl Barrier {
     ///
     /// # Arguments
     ///
-    /// * `n` - The number of tasks to wait for. If `n` is 0, it will be treated as 1.
+    /// * `n`: The number of tasks to wait for. If `n` is 0, it will be treated as 1.
     ///
     /// # Examples
     ///
