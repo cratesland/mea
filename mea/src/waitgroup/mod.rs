@@ -35,6 +35,7 @@
 //!             println!("Task {} starting", i);
 //!             tokio::time::sleep(Duration::from_millis(100)).await;
 //!             // wg is automatically decremented when dropped
+//!             drop(wg);
 //!         }));
 //!     }
 //!
@@ -83,6 +84,8 @@ mod tests;
 ///             println!("Task {} completed", i);
 ///             // Wait until all tasks have finished
 ///             wg.await
+///             // Or 'wg' is automatically decremented when dropped
+///             // drop(wg);
 ///         }));
 ///     }
 ///
@@ -99,9 +102,14 @@ mod tests;
 /// ```
 ///
 /// [`clone()`]: WaitGroup::clone
-#[derive(Debug)]
 pub struct WaitGroup {
     state: Arc<CountdownState>,
+}
+
+impl fmt::Debug for WaitGroup {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WaitGroup").finish_non_exhaustive()
+    }
 }
 
 impl Default for WaitGroup {
@@ -157,10 +165,8 @@ impl IntoFuture for WaitGroup {
     type Output = ();
     type IntoFuture = Wait;
 
-    /// Converts the WaitGroup into a future that completes when all tasks finish.
-    ///
-    /// This allows using `.await` directly on a WaitGroup to wait for all tasks
-    /// to complete.
+    /// Converts the WaitGroup into a future that completes when all tasks finish. This decreases
+    /// the WaitGroup counter.
     fn into_future(self) -> Self::IntoFuture {
         let state = self.state.clone();
         drop(self);
