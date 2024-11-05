@@ -22,11 +22,11 @@ Mea (Make Easy Async) is a runtime-agnostic library providing essential synchron
 
 ## Features
 
-* [**Barrier**](https://docs.rs/mea/*/mea/barrier/struct.Barrier.html) - A synchronization point where multiple tasks can wait until all participants arrive
-* [**Latch**](https://docs.rs/mea/*/mea/latch/struct.Latch.html) - A single-use barrier that allows one or more tasks to wait until a signal is given
-* [**Mutex**](https://docs.rs/mea/*/mea/mutex/struct.Mutex.html) - A mutual exclusion primitive for protecting shared data
-* [**Semaphore**](https://docs.rs/mea/*/mea/semaphore/struct.Semaphore.html) - A synchronization primitive that controls access to a shared resource
-* [**WaitGroup**](https://docs.rs/mea/*/mea/waitgroup/struct.WaitGroup.html) - A synchronization primitive that allows waiting for multiple tasks to complete
+* [**Barrier**](https://docs.rs/mea/*/mea/barrier/struct.Barrier.html): A synchronization primitive that enables tasks to wait until all participants arrive.
+* [**Latch**](https://docs.rs/mea/*/mea/latch/struct.Latch.html): A synchronization primitive that allows one or more tasks to wait until a set of operations completes.
+* [**Mutex**](https://docs.rs/mea/*/mea/mutex/struct.Mutex.html): A mutual exclusion primitive for protecting shared data.
+* [**Semaphore**](https://docs.rs/mea/*/mea/semaphore/struct.Semaphore.html): A synchronization primitive that controls access to a shared resource.
+* [**WaitGroup**](https://docs.rs/mea/*/mea/waitgroup/struct.WaitGroup.html): A synchronization primitive that allows waiting for multiple tasks to complete.
 
 ## Installation
 
@@ -49,10 +49,6 @@ All types in this library implement `Send` and `Sync`, making them safe to share
 This crate is built against the latest stable release, and its minimum supported rustc version is 1.75.0.
 
 The policy is that the minimum Rust version required to use this crate can be increased in minor version updates. For example, if Mea 1.0 requires Rust 1.20.0, then Mea 1.0.z for all values of z will also require Rust 1.20.0 or newer. However, Mea 1.y for y > 0 may require a newer minimum version of Rust.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
