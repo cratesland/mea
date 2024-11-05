@@ -21,28 +21,28 @@
 //! # Examples
 //!
 //! ```
+//! # #[pollster::main]
+//! # async fn main() {
 //! use std::time::Duration;
 //!
 //! use mea::waitgroup::WaitGroup;
+//! let wg = WaitGroup::new();
+//! let mut handles = Vec::new();
 //!
-//! async fn example() {
-//!     let wg = WaitGroup::new();
-//!     let mut handles = Vec::new();
-//!
-//!     for i in 0..3 {
-//!         let wg = wg.clone();
-//!         handles.push(tokio::spawn(async move {
-//!             println!("Task {} starting", i);
-//!             tokio::time::sleep(Duration::from_millis(100)).await;
-//!             // wg is automatically decremented when dropped
-//!             drop(wg);
-//!         }));
-//!     }
-//!
-//!     // Wait for all tasks to complete
-//!     wg.await;
-//!     println!("All tasks completed");
+//! for i in 0..3 {
+//!     let wg = wg.clone();
+//!     handles.push(tokio::spawn(async move {
+//!         println!("Task {} starting", i);
+//!         tokio::time::sleep(Duration::from_millis(100)).await;
+//!         // wg is automatically decremented when dropped
+//!         drop(wg);
+//!     }));
 //! }
+//!
+//! // Wait for all tasks to complete
+//! wg.await;
+//! println!("All tasks completed");
+//! # }
 //! ```
 
 use std::fmt;
@@ -67,38 +67,39 @@ mod tests;
 /// # Examples
 ///
 /// ```
+/// # #[pollster::main]
+/// # async fn main() {
 /// use std::time::Duration;
 ///
 /// use mea::waitgroup::WaitGroup;
 ///
-/// async fn example() {
-///     let wg = WaitGroup::new();
-///     let mut handles = Vec::new();
+/// let wg = WaitGroup::new();
+/// let mut handles = Vec::new();
 ///
-///     // Spawn multiple tasks
-///     for i in 0..3 {
-///         let wg = wg.clone(); // Create a new worker handle
-///         handles.push(tokio::spawn(async move {
-///             // Simulate some work
-///             tokio::time::sleep(Duration::from_millis(100)).await;
-///             println!("Task {} completed", i);
-///             // Wait until all tasks have finished
-///             wg.await
-///             // Or 'wg' is automatically decremented when dropped
-///             // drop(wg);
-///         }));
-///     }
-///
-///     // Wait for all tasks to complete
-///     wg.await;
-///
-///     // All tasks have finished
-///     println!("All tasks completed");
-///
-///     for handle in handles {
-///         handle.await.unwrap();
-///     }
+/// // Spawn multiple tasks
+/// for i in 0..3 {
+///     let wg = wg.clone(); // Create a new worker handle
+///     handles.push(tokio::spawn(async move {
+///         // Simulate some work
+///         tokio::time::sleep(Duration::from_millis(100)).await;
+///         println!("Task {} completed", i);
+///         // Wait until all tasks have finished
+///         wg.await
+///         // Or 'wg' is automatically decremented when dropped
+///         // drop(wg);
+///     }));
 /// }
+///
+/// // Wait for all tasks to complete
+/// wg.await;
+///
+/// // All tasks have finished
+/// println!("All tasks completed");
+///
+/// for handle in handles {
+///     handle.await.unwrap();
+/// }
+/// # }
 /// ```
 ///
 /// [`clone()`]: WaitGroup::clone

@@ -12,38 +12,67 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! A counting semaphore for controlling access to a pool of resources.
+//! A synchronization primitive that controls access to a share resource.
 //!
-//! Semaphores can be used to limit the number of tasks that can access a resource
-//! simultaneously. This is particularly useful for implementing connection pools,
-//! rate limiters, or any scenario where you need to control concurrent access to
-//! limited resources.
+//! A semaphore maintains a set of permits. Permits are used to synchronize
+//! access to a shared resource. A semaphore differs from a mutex in that it
+//! can allow more than one concurrent caller to access the shared resource at a
+//! time.
+//!
+//! When `acquire` is called and the semaphore has remaining permits, the
+//! function immediately returns a permit. However, if no remaining permits are
+//! available, `acquire` (asynchronously) waits until an outstanding permit is
+//! dropped. At this point, the freed permit is assigned to the caller.
 //!
 //! # Examples
 //!
+//! ## Basic usage
+//!
 //! ```
-//! use std::sync::Arc;
+//! # #[pollster::main]
+//! # async fn main() {
+//! use mea::semaphore::Semaphore;
+//!
+//! let semaphore = Semaphore::new(3);
+//! let a_permit = semaphore.acquire(1).await;
+//! let two_permits = semaphore.acquire(2).await;
+//!
+//! assert_eq!(semaphore.available_permits(), 0);
+//!
+//! let permit_attempt = semaphore.try_acquire(1);
+//! assert!(permit_attempt.is_none());
+//! # }
+//! ```
+//!
+//! ## Limit the number of simultaneously opened files in your program
+//!
+//! Most operating systems have limits on the number of open file
+//! handles. Even in systems without explicit limits, resource constraints
+//! implicitly set an upper bound on the number of open files. If your
+//! program attempts to open a large number of files and exceeds this
+//! limit, it will result in an error.
+//!
+//! This example uses a Semaphore with 100 permits. By acquiring a permit from
+//! the Semaphore before accessing a file, you ensure that your program opens
+//! no more than 100 files at a time. When trying to open the 101st
+//! file, the program will wait until a permit becomes available before
+//! proceeding to open another file.
+//!
+//! ```
+//! use std::fs::File;
+//! use std::io::Result;
+//! use std::io::Write;
 //!
 //! use mea::semaphore::Semaphore;
 //!
-//! struct ConnectionPool {
-//!     sem: Arc<Semaphore>,
+//! static PERMITS: Semaphore = Semaphore::new(100);
+//!
+//! async fn write_to_file(message: &[u8]) -> Result<()> {
+//!     let _permit = PERMITS.acquire(1).await;
+//!     let mut buffer = File::create("example.txt")?;
+//!     buffer.write_all(message).await?;
+//!     Ok(()) // Permit goes out of scope here, and is available again for acquisition
 //! }
-//!
-//! impl ConnectionPool {
-//!     fn new(size: u32) -> Self {
-//!         Self {
-//!             sem: Arc::new(Semaphore::new(size)),
-//!         }
-//!     }
-//!
-//!     async fn get_connection(&self) -> Connection {
-//!         let _permit = self.sem.acquire(1).await;
-//!         Connection {} // Acquire and return a connection
-//!     }
-//! }
-//!
-//! struct Connection {}
 //! ```
 
 use crate::internal;
@@ -62,33 +91,55 @@ mod tests;
 /// (physical or logical) resource. For example, here is a class that uses a
 /// semaphore to control access to a pool of connections:
 ///
+/// # Examples
+///
+/// ## Basic usage
+///
 /// ```
-/// use std::sync::Arc;
+/// # #[pollster::main]
+/// # async fn main() {
+/// use mea::semaphore::Semaphore;
+///
+/// let semaphore = Semaphore::new(3);
+/// let a_permit = semaphore.acquire(1).await;
+/// let two_permits = semaphore.acquire(2).await;
+///
+/// assert_eq!(semaphore.available_permits(), 0);
+///
+/// let permit_attempt = semaphore.try_acquire(1);
+/// assert!(permit_attempt.is_none());
+/// # }
+/// ```
+///
+/// ## Limit the number of simultaneously opened files in your program
+///
+/// Most operating systems have limits on the number of open file
+/// handles. Even in systems without explicit limits, resource constraints
+/// implicitly set an upper bound on the number of open files. If your
+/// program attempts to open a large number of files and exceeds this
+/// limit, it will result in an error.
+///
+/// This example uses a Semaphore with 100 permits. By acquiring a permit from
+/// the Semaphore before accessing a file, you ensure that your program opens
+/// no more than 100 files at a time. When trying to open the 101st
+/// file, the program will wait until a permit becomes available before
+/// proceeding to open another file.
+///
+/// ```
+/// use std::fs::File;
+/// use std::io::Result;
+/// use std::io::Write;
 ///
 /// use mea::semaphore::Semaphore;
 ///
-/// struct Pool {
-///     sem: Arc<Semaphore>,
-///     // ... other fields for managing connections
+/// static PERMITS: Semaphore = Semaphore::new(100);
+///
+/// async fn write_to_file(message: &[u8]) -> Result<()> {
+///     let _permit = PERMITS.acquire(1).await;
+///     let mut buffer = File::create("example.txt")?;
+///     buffer.write_all(message).await?;
+///     Ok(()) // Permit goes out of scope here, and is available again for acquisition
 /// }
-///
-/// impl Pool {
-///     fn new(size: u32) -> Self {
-///         Self {
-///             sem: Arc::new(Semaphore::new(size)),
-///             // ... initialize other fields
-///         }
-///     }
-///
-///     async fn get_connection(&self) -> Connection {
-///         let _permit = self.sem.acquire(1).await;
-///         // ... acquire and return a connection
-///         Connection {}
-///     }
-/// }
-///
-/// // Dummy connection type for the example
-/// struct Connection {}
 /// ```
 ///
 /// [`acquire`]: Semaphore::acquire
@@ -215,26 +266,27 @@ impl Semaphore {
     /// # Examples
     ///
     /// ```
+    /// # #[pollster::main]
+    /// # async fn main() {
     /// use std::sync::Arc;
     ///
     /// use mea::semaphore::Semaphore;
     ///
-    /// async fn example() {
-    ///     let sem = Arc::new(Semaphore::new(2));
-    ///     let sem2 = sem.clone();
+    /// let sem = Arc::new(Semaphore::new(2));
+    /// let sem2 = sem.clone();
     ///
-    ///     let handle = tokio::spawn(async move {
-    ///         let permit = sem2.acquire(1).await;
-    ///         // Do some work with the permit
-    ///         // Permit is automatically released when dropped
-    ///     });
+    /// let handle = tokio::spawn(async move {
+    ///     let permit = sem2.acquire(1).await;
+    ///     // Do some work with the permit.
+    ///     // Permit is automatically released when dropped.
+    /// });
     ///
-    ///     let permit = sem.acquire(1).await;
-    ///     // Do some work with the permit
-    ///     drop(permit); // Explicitly release the permit
+    /// let permit = sem.acquire(1).await;
+    /// // Do some work with the permit
+    /// drop(permit); // Explicitly release the permit
     ///
-    ///     handle.await.unwrap();
-    /// }
+    /// handle.await.unwrap();
+    /// # }
     /// ```
     pub async fn acquire(&self, permits: u32) -> SemaphorePermit<'_> {
         self.s.acquire(permits).await;

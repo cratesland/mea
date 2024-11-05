@@ -21,27 +21,28 @@
 //! # Examples
 //!
 //! ```
+//! # #[pollster::main]
+//! # async fn main() {
 //! use std::sync::Arc;
 //!
 //! use mea::latch::Latch;
 //!
-//! async fn example() {
-//!     let latch = Arc::new(Latch::new(3));
-//!     let mut handles = Vec::new();
+//! let latch = Arc::new(Latch::new(3));
+//! let mut handles = Vec::new();
 //!
-//!     for i in 0..3 {
-//!         let latch = latch.clone();
-//!         handles.push(tokio::spawn(async move {
-//!             println!("Task {} starting", i);
-//!             // Simulate some work
-//!             latch.count_down(); // Signal completion
-//!         }));
-//!     }
-//!
-//!     // Wait for all tasks to complete
-//!     latch.wait().await;
-//!     println!("All tasks completed");
+//! for i in 0..3 {
+//!     let latch = latch.clone();
+//!     handles.push(tokio::spawn(async move {
+//!         println!("Task {} starting", i);
+//!         // Simulate some work
+//!         latch.count_down(); // Signal completion
+//!     }));
 //! }
+//!
+//! // Wait for all tasks to complete
+//! latch.wait().await;
+//! println!("All tasks completed");
+//! # }
 //! ```
 
 use std::fmt;
@@ -64,32 +65,33 @@ mod tests;
 /// # Examples
 ///
 /// ```
+/// # #[pollster::main]
+/// # async fn main() {
 /// use std::sync::Arc;
 ///
 /// use mea::latch::Latch;
 ///
-/// async fn example() {
-///     let latch = Arc::new(Latch::new(3));
-///     let mut handles = Vec::new();
+/// let latch = Arc::new(Latch::new(3));
+/// let mut handles = Vec::new();
 ///
-///     // Spawn tasks that will count down the latch
-///     for i in 0..3 {
-///         let latch = latch.clone();
-///         handles.push(tokio::spawn(async move {
-///             // Do some work
-///             println!("Task {} completing", i);
-///             latch.count_down();
-///         }));
-///     }
-///
-///     // Wait for all tasks to complete
-///     latch.wait().await;
-///     println!("All tasks completed!");
-///
-///     for handle in handles {
-///         handle.await.unwrap();
-///     }
+/// // Spawn tasks that will count down the latch
+/// for i in 0..3 {
+///     let latch = latch.clone();
+///     handles.push(tokio::spawn(async move {
+///         // Do some work
+///         println!("Task {} completing", i);
+///         latch.count_down();
+///     }));
 /// }
+///
+/// // Wait for all tasks to complete
+/// latch.wait().await;
+/// println!("All tasks completed!");
+///
+/// for handle in handles {
+///     handle.await.unwrap();
+/// }
+/// # }
 /// ```
 ///
 /// [`count_down()`]: Latch::count_down
@@ -213,24 +215,25 @@ impl Latch {
     /// # Examples
     ///
     /// ```
+    /// # #[pollster::main]
+    /// # async fn main() {
     /// use std::sync::Arc;
     ///
     /// use mea::latch::Latch;
     ///
-    /// async fn example() {
-    ///     let latch = Arc::new(Latch::new(1));
-    ///     let latch2 = latch.clone();
+    /// let latch = Arc::new(Latch::new(1));
+    /// let latch2 = latch.clone();
     ///
-    ///     // Spawn a task that will wait for the latch
-    ///     let handle = tokio::spawn(async move {
-    ///         latch2.wait().await;
-    ///         println!("Latch reached zero!");
-    ///     });
+    /// // Spawn a task that will wait for the latch
+    /// let handle = tokio::spawn(async move {
+    ///     latch2.wait().await;
+    ///     println!("Latch reached zero!");
+    /// });
     ///
-    ///     // Count down the latch
-    ///     latch.count_down();
-    ///     handle.await.unwrap();
-    /// }
+    /// // Count down the latch
+    /// latch.count_down();
+    /// handle.await.unwrap();
+    /// # }
     /// ```
     pub fn wait(&self) -> LatchWait<'_> {
         LatchWait {

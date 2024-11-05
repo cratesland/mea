@@ -16,7 +16,7 @@
 name = "mea"
 version = "0.0.5"
 
-categories = ["async", "synchronization", "waitgroup", "concurrency", "no-std"]
+categories = ["asynchronous", "concurrency"]
 description = "A runtime-agnostic library providing essential synchronization primitives for asynchronous Rust programming."
 documentation = "https://docs.rs/mea"
 keywords = ["async", "concurrency", "synchronization", "waitgroup", "mutex"]
@@ -36,7 +36,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 slab = { version = "0.4.9" }
 
 [dev-dependencies]
-pollster = { version = "0.4.0" }
+pollster = { version = "0.4.0", features = ["macro"] }
 tokio = { version = "1.41.0", features = ["full"] }
 tokio-test = { version = "0.4.4" }
 

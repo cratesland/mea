@@ -21,22 +21,23 @@
 //! # Examples
 //!
 //! ```
+//! # #[pollster::main]
+//! # async fn main() {
 //! use std::sync::Arc;
 //!
 //! use mea::mutex::Mutex;
 //!
-//! async fn example() {
-//!     let mutex = Arc::new(Mutex::new(0));
-//!     let mut handles = Vec::new();
+//! let mutex = Arc::new(Mutex::new(0));
+//! let mut handles = Vec::new();
 //!
-//!     for i in 0..3 {
-//!         let mutex = mutex.clone();
-//!         handles.push(tokio::spawn(async move {
-//!             let mut lock = mutex.lock().await;
-//!             *lock += i;
-//!         }));
-//!     }
+//! for i in 0..3 {
+//!     let mutex = mutex.clone();
+//!     handles.push(tokio::spawn(async move {
+//!         let mut lock = mutex.lock().await;
+//!         *lock += i;
+//!     }));
 //! }
+//! # }
 //! ```
 
 use std::cell::UnsafeCell;
@@ -55,29 +56,30 @@ use crate::internal;
 /// # Examples
 ///
 /// ```
+/// # #[pollster::main]
+/// # async fn main() {
 /// use std::sync::Arc;
 ///
 /// use mea::mutex::Mutex;
 ///
-/// async fn example() {
-///     let mutex = Arc::new(Mutex::new(0));
-///     let mut handles = vec![];
+/// let mutex = Arc::new(Mutex::new(0));
+/// let mut handles = vec![];
 ///
-///     for i in 0..3 {
-///         let mutex = mutex.clone();
-///         handles.push(tokio::spawn(async move {
-///             let mut lock = mutex.lock().await;
-///             *lock += i;
-///         }));
-///     }
-///
-///     for handle in handles {
-///         handle.await.unwrap();
-///     }
-///
-///     let final_value = mutex.lock().await;
-///     assert_eq!(*final_value, 3); // 0 + 1 + 2
+/// for i in 0..3 {
+///     let mutex = mutex.clone();
+///     handles.push(tokio::spawn(async move {
+///         let mut lock = mutex.lock().await;
+///         *lock += i;
+///     }));
 /// }
+///
+/// for handle in handles {
+///     handle.await.unwrap();
+/// }
+///
+/// let final_value = mutex.lock().await;
+/// assert_eq!(*final_value, 3); // 0 + 1 + 2
+/// #  }
 /// ```
 ///
 /// [`new`]: Mutex::new
@@ -135,27 +137,27 @@ impl<T: ?Sized> Mutex<T> {
     /// # Examples
     ///
     /// ```
+    /// # #[pollster::main]
+    /// # async fn main() {
     /// use std::sync::Arc;
     ///
     /// use mea::mutex::Mutex;
+    /// let mutex = Arc::new(Mutex::new(1));
+    /// let mutex2 = mutex.clone();
     ///
-    /// async fn example() {
-    ///     let mutex = Arc::new(Mutex::new(1));
-    ///     let mutex2 = mutex.clone();
+    /// let handle = tokio::spawn(async move {
+    ///     let mut lock = mutex2.lock().await;
+    ///     *lock += 1;
+    /// });
     ///
-    ///     let handle = tokio::spawn(async move {
-    ///         let mut lock = mutex2.lock().await;
-    ///         *lock += 1;
-    ///     });
+    /// let mut lock = mutex.lock().await;
+    /// *lock *= 2;
+    /// drop(lock); // Release the lock
     ///
-    ///     let mut lock = mutex.lock().await;
-    ///     *lock *= 2;
-    ///     drop(lock); // Release the lock
-    ///
-    ///     handle.await.unwrap();
-    ///     let lock = mutex.lock().await;
-    ///     assert_eq!(*lock, 3); // (1 * 2) + 1
-    /// }
+    /// handle.await.unwrap();
+    /// let lock = mutex.lock().await;
+    /// assert_eq!(*lock, 3); // (1 * 2) + 1
+    /// # }
     /// ```
     pub async fn lock(&self) -> MutexGuard<'_, T> {
         let fut = async {

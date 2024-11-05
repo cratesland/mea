@@ -21,41 +21,42 @@
 //! # Examples
 //!
 //! ```
+//! # #[pollster::main]
+//! # async fn main() {
 //! use std::sync::Arc;
 //!
 //! use mea::barrier::Barrier;
 //!
-//! async fn example() {
-//!     let barrier = Arc::new(Barrier::new(3));
-//!     let mut handles = Vec::new();
+//! let barrier = Arc::new(Barrier::new(3));
+//! let mut handles = Vec::new();
 //!
-//!     for i in 0..3 {
-//!         let barrier = barrier.clone();
-//!         handles.push(tokio::spawn(async move {
-//!             println!("Task {} before barrier", i);
-//!             let is_leader = barrier.wait().await;
-//!             println!("Task {} after barrier (leader: {})", i, is_leader);
-//!         }));
-//!     }
-//!
-//!     for handle in std::mem::take(&mut handles) {
-//!        handle.await.unwrap();
-//!     }
-//!
-//!     // The barrier can be reused (generation is increased).
-//!     for i in 0..3 {
-//!         let barrier = barrier.clone();
-//!         handles.push(tokio::spawn(async move {
-//!             println!("Task {} before barrier", i);
-//!             let is_leader = barrier.wait().await;
-//!             println!("Task {} after barrier (leader: {})", i, is_leader);
-//!         }));
-//!     }
-//!
-//!     for handle in handles {
-//!        handle.await.unwrap();
-//!     }
+//! for i in 0..3 {
+//!     let barrier = barrier.clone();
+//!     handles.push(tokio::spawn(async move {
+//!         println!("Task {} before barrier", i);
+//!         let is_leader = barrier.wait().await;
+//!         println!("Task {} after barrier (leader: {})", i, is_leader);
+//!     }));
 //! }
+//!
+//! for handle in std::mem::take(&mut handles) {
+//!     handle.await.unwrap();
+//! }
+//!
+//! // The barrier can be reused (generation is increased).
+//! for i in 0..3 {
+//!     let barrier = barrier.clone();
+//!     handles.push(tokio::spawn(async move {
+//!         println!("Task {} before barrier", i);
+//!         let is_leader = barrier.wait().await;
+//!         println!("Task {} after barrier (leader: {})", i, is_leader);
+//!     }));
+//! }
+//!
+//! for handle in handles {
+//!     handle.await.unwrap();
+//! }
+//! # }
 //! ```
 
 use std::fmt;
@@ -81,41 +82,42 @@ mod tests;
 /// # Examples
 ///
 /// ```
+/// # #[pollster::main]
+/// # async fn main() {
 /// use std::sync::Arc;
 ///
 /// use mea::barrier::Barrier;
 ///
-/// async fn example() {
-///     let barrier = Arc::new(Barrier::new(3));
-///     let mut handles = Vec::new();
+/// let barrier = Arc::new(Barrier::new(3));
+/// let mut handles = Vec::new();
 ///
-///     for i in 0..3 {
-///         let barrier = barrier.clone();
-///         handles.push(tokio::spawn(async move {
-///             println!("Task {} before barrier", i);
-///             let is_leader = barrier.wait().await;
-///             println!("Task {} after barrier (leader: {})", i, is_leader);
-///         }));
-///     }
-///
-///     for handle in std::mem::take(&mut handles) {
-///        handle.await.unwrap();
-///     }
-///
-///     // The barrier can be reused (generation is increased).
-///     for i in 0..3 {
-///         let barrier = barrier.clone();
-///         handles.push(tokio::spawn(async move {
-///             println!("Task {} before barrier", i);
-///             let is_leader = barrier.wait().await;
-///             println!("Task {} after barrier (leader: {})", i, is_leader);
-///         }));
-///     }
-///
-///     for handle in handles {
-///        handle.await.unwrap();
-///     }
+/// for i in 0..3 {
+///     let barrier = barrier.clone();
+///     handles.push(tokio::spawn(async move {
+///         println!("Task {} before barrier", i);
+///         let is_leader = barrier.wait().await;
+///         println!("Task {} after barrier (leader: {})", i, is_leader);
+///     }));
 /// }
+///
+/// for handle in std::mem::take(&mut handles) {
+///     handle.await.unwrap();
+/// }
+///
+/// // The barrier can be reused (generation is increased).
+/// for i in 0..3 {
+///     let barrier = barrier.clone();
+///     handles.push(tokio::spawn(async move {
+///         println!("Task {} before barrier", i);
+///         let is_leader = barrier.wait().await;
+///         println!("Task {} after barrier (leader: {})", i, is_leader);
+///     }));
+/// }
+///
+/// for handle in handles {
+///     handle.await.unwrap();
+/// }
+/// # }
 /// ```
 ///
 /// [`wait()`]: Barrier::wait
@@ -187,23 +189,24 @@ impl Barrier {
     /// # Examples
     ///
     /// ```
+    /// # #[pollster::main]
+    /// # async fn main() {
     /// use std::sync::Arc;
     ///
     /// use mea::barrier::Barrier;
     ///
-    /// async fn example() {
-    ///     let barrier = Arc::new(Barrier::new(2));
-    ///     let barrier2 = barrier.clone();
+    /// let barrier = Arc::new(Barrier::new(2));
+    /// let barrier2 = barrier.clone();
     ///
-    ///     let handle = tokio::spawn(async move {
-    ///         let is_leader = barrier2.wait().await;
-    ///         println!("Task 1: leader = {}", is_leader);
-    ///     });
+    /// let handle = tokio::spawn(async move {
+    ///     let is_leader = barrier2.wait().await;
+    ///     println!("Task 1: leader = {}", is_leader);
+    /// });
     ///
-    ///     let is_leader = barrier.wait().await;
-    ///     println!("Task 2: leader = {}", is_leader);
-    ///     handle.await.unwrap();
-    /// }
+    /// let is_leader = barrier.wait().await;
+    /// println!("Task 2: leader = {}", is_leader);
+    /// handle.await.unwrap();
+    /// # }
     /// ```
     pub async fn wait(&self) -> bool {
         let generation = {
