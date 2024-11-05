@@ -12,26 +12,96 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! An async mutex for protecting shared data.
+//!
+//! Unlike a standard mutex, this implementation is designed to work with async/await,
+//! ensuring tasks yield properly when the lock is contended. This makes it suitable
+//! for protecting shared resources in async code.
+//!
+//! # Examples
+//!
+//! ```
+//! # #[tokio::main]
+//! # async fn main() {
+//! use std::sync::Arc;
+//!
+//! use mea::mutex::Mutex;
+//!
+//! let mutex = Arc::new(Mutex::new(0));
+//! let mut handles = Vec::new();
+//!
+//! for i in 0..3 {
+//!     let mutex = mutex.clone();
+//!     handles.push(tokio::spawn(async move {
+//!         let mut lock = mutex.lock().await;
+//!         *lock += i;
+//!     }));
+//! }
+//! # }
+//! ```
+
 use std::cell::UnsafeCell;
+use std::fmt;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
 use crate::internal;
 
+/// An async mutex for protecting shared data.
+///
+/// This mutex will block tasks waiting for the lock to become available. The
+/// mutex can be created via [`new`] and the protected data can be accessed
+/// via the async [`lock`] method.
+///
+/// # Examples
+///
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// use std::sync::Arc;
+///
+/// use mea::mutex::Mutex;
+///
+/// let mutex = Arc::new(Mutex::new(0));
+/// let mut handles = vec![];
+///
+/// for i in 0..3 {
+///     let mutex = mutex.clone();
+///     handles.push(tokio::spawn(async move {
+///         let mut lock = mutex.lock().await;
+///         *lock += i;
+///     }));
+/// }
+///
+/// for handle in handles {
+///     handle.await.unwrap();
+/// }
+///
+/// let final_value = mutex.lock().await;
+/// assert_eq!(*final_value, 3); // 0 + 1 + 2
+/// #  }
+/// ```
+///
+/// [`new`]: Mutex::new
+/// [`lock`]: Mutex::lock
+#[derive(Debug)]
 pub struct Mutex<T: ?Sized> {
     s: internal::Semaphore,
     c: UnsafeCell<T>,
 }
 
+unsafe impl<T: ?Sized + Send> Send for Mutex<T> {}
+unsafe impl<T: ?Sized + Send> Sync for Mutex<T> {}
+
 impl<T> Mutex<T> {
-    /// Creates a new lock in an unlocked state ready for use.
+    /// Creates a new mutex in an unlocked state ready for use.
     ///
     /// # Examples
     ///
     /// ```
     /// use mea::mutex::Mutex;
     ///
-    /// let lock = Mutex::new(5);
+    /// let mutex = Mutex::new(5);
     /// ```
     pub fn new(t: T) -> Self {
         let s = internal::Semaphore::new(1);
@@ -57,23 +127,24 @@ impl<T> Mutex<T> {
 
 impl<T: ?Sized> Mutex<T> {
     /// Locks this mutex, causing the current task to yield until the lock has
-    /// been acquired.  When the lock has been acquired, function returns a
+    /// been acquired. When the lock has been acquired, function returns a
     /// [`MutexGuard`].
     ///
-    /// If the mutex is available to be acquired immediately, then this call
-    /// will typically not yield to the runtime. However, this is not guaranteed
-    /// under all circumstances.
+    /// This method is async and will yield the current task if the mutex is
+    /// currently held by another task. When the mutex becomes available, the
+    /// task will be woken up and given the lock.
     ///
     /// # Examples
     ///
     /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use mea::mutex::Mutex;
-    /// use pollster::FutureExt;
-    ///
     /// let mutex = Mutex::new(1);
-    /// let mut n = mutex.lock().block_on();
+    ///
+    /// let mut n = mutex.lock().await;
     /// *n = 2;
-    /// assert_eq!(*n, 2);
+    /// # }
     /// ```
     pub async fn lock(&self) -> MutexGuard<'_, T> {
         let fut = async {
@@ -92,8 +163,15 @@ impl<T: ?Sized> Mutex<T> {
     /// use mea::mutex::Mutex;
     ///
     /// let mutex = Mutex::new(1);
-    /// let n = mutex.try_lock().unwrap();
-    /// assert_eq!(*n, 1);
+    /// let guard = mutex.try_lock();
+    /// match guard {
+    ///     Some(mut guard) => {
+    ///         *guard += 1;
+    ///     }
+    ///     None => {
+    ///         println!("mutex is locked");
+    ///     }
+    /// }
     /// ```
     pub fn try_lock(&self) -> Option<MutexGuard<'_, T>> {
         if self.s.try_acquire(1) {
@@ -107,7 +185,7 @@ impl<T: ?Sized> Mutex<T> {
     /// Returns a mutable reference to the underlying data.
     ///
     /// Since this call borrows the `Mutex` mutably, no actual locking needs to
-    /// take place, i.e., the mutable borrow statically guarantees no locks exist.
+    /// take place -- the mutable borrow statically guarantees no locks exist.
     ///
     /// # Examples
     ///
@@ -115,18 +193,29 @@ impl<T: ?Sized> Mutex<T> {
     /// use mea::mutex::Mutex;
     ///
     /// let mut mutex = Mutex::new(1);
-    /// let mut n = mutex.get_mut();
+    /// let n = mutex.get_mut();
     /// *n = 2;
-    /// assert_eq!(*n, 2);
     /// ```
     pub fn get_mut(&mut self) -> &mut T {
         self.c.get_mut()
     }
 }
 
+/// RAII structure used to release the exclusive lock on a mutex when dropped.
+///
+/// This structure is created by the [`lock`] and [`try_lock`] methods on [`Mutex`].
+///
+/// [`lock`]: Mutex::lock
+/// [`try_lock`]: Mutex::try_lock
 #[must_use = "if unused the Mutex will immediately unlock"]
 pub struct MutexGuard<'a, T: ?Sized> {
     lock: &'a Mutex<T>,
+}
+
+impl<T: ?Sized + fmt::Debug> fmt::Debug for MutexGuard<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&**self, f)
+    }
 }
 
 impl<T: ?Sized> Drop for MutexGuard<'_, T> {

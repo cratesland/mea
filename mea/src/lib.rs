@@ -13,6 +13,40 @@
 // limitations under the License.
 
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![deny(missing_docs)]
+
+//! # Mea - Make Easy Async
+//!
+//! `mea` is a runtime-agnostic library providing essential synchronization primitives for
+//! asynchronous Rust programming. The library offers a collection of well-tested, efficient
+//! synchronization tools that work with any async runtime.
+//!
+//! ## Features
+//!
+//! * [`Barrier`] - A synchronization point where multiple tasks can wait until all participants
+//!   arrive
+//! * [`Latch`] - A single-use barrier that allows one or more tasks to wait until a signal is given
+//! * [`Mutex`] - A mutual exclusion primitive for protecting shared data
+//! * [`Semaphore`] - A synchronization primitive that controls access to a shared resource
+//! * [`WaitGroup`] - A synchronization primitive that allows waiting for multiple tasks to complete
+//!
+//! ## Runtime Agnostic
+//!
+//! All synchronization primitives in this library are runtime-agnostic, meaning they can be used
+//! with any async runtime like Tokio, async-std, or others. This makes the library highly versatile
+//! and portable.
+//!
+//! ## Thread Safety
+//!
+//! All types in this library implement `Send` and `Sync`, making them safe to share across thread
+//! boundaries. This is essential for concurrent programming where data needs to be accessed from
+//! multiple threads.
+//!
+//! [`Barrier`]: barrier::Barrier
+//! [`Latch`]: latch::Latch
+//! [`Mutex`]: mutex::Mutex
+//! [`Semaphore`]: semaphore::Semaphore
+//! [`WaitGroup`]: waitgroup::WaitGroup
 
 mod internal;
 
