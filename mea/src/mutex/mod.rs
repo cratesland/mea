@@ -21,7 +21,7 @@
 //! # Examples
 //!
 //! ```
-//! # #[pollster::main]
+//! # #[tokio::main]
 //! # async fn main() {
 //! use std::sync::Arc;
 //!
@@ -56,7 +56,7 @@ use crate::internal;
 /// # Examples
 ///
 /// ```
-/// # #[pollster::main]
+/// # #[tokio::main]
 /// # async fn main() {
 /// use std::sync::Arc;
 ///
@@ -137,7 +137,7 @@ impl<T: ?Sized> Mutex<T> {
     /// # Examples
     ///
     /// ```
-    /// # #[pollster::main]
+    /// # #[tokio::main]
     /// # async fn main() {
     /// use std::sync::Arc;
     ///

@@ -21,7 +21,7 @@
 //! # Examples
 //!
 //! ```
-//! # #[pollster::main]
+//! # #[tokio::main]
 //! # async fn main() {
 //! use std::sync::Arc;
 //!
@@ -82,7 +82,7 @@ mod tests;
 /// # Examples
 ///
 /// ```
-/// # #[pollster::main]
+/// # #[tokio::main]
 /// # async fn main() {
 /// use std::sync::Arc;
 ///
@@ -162,7 +162,7 @@ impl Barrier {
         // If n is 0, it's not clear what behavior the user wants.
         // std::sync::Barrier works with n = 0 the same as n = 1,
         // where every .wait() immediately unblocks, so we adopt that here as well.
-        let n = n.max(1);
+        let n = if n > 0 { n } else { 1 };
 
         Self {
             n,
@@ -189,7 +189,7 @@ impl Barrier {
     /// # Examples
     ///
     /// ```
-    /// # #[pollster::main]
+    /// # #[tokio::main]
     /// # async fn main() {
     /// use std::sync::Arc;
     ///

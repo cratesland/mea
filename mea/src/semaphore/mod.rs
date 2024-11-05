@@ -29,7 +29,7 @@
 //! ## Basic usage
 //!
 //! ```
-//! # #[pollster::main]
+//! # #[tokio::main]
 //! # async fn main() {
 //! use mea::semaphore::Semaphore;
 //!
@@ -62,15 +62,16 @@
 //! use std::fs::File;
 //! use std::io::Result;
 //! use std::io::Write;
+//! use std::sync::LazyLock;
 //!
 //! use mea::semaphore::Semaphore;
 //!
-//! static PERMITS: Semaphore = Semaphore::new(100);
+//! static PERMITS: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(100));
 //!
 //! async fn write_to_file(message: &[u8]) -> Result<()> {
 //!     let _permit = PERMITS.acquire(1).await;
 //!     let mut buffer = File::create("example.txt")?;
-//!     buffer.write_all(message).await?;
+//!     buffer.write_all(message)?;
 //!     Ok(()) // Permit goes out of scope here, and is available again for acquisition
 //! }
 //! ```
@@ -96,7 +97,7 @@ mod tests;
 /// ## Basic usage
 ///
 /// ```
-/// # #[pollster::main]
+/// # #[tokio::main]
 /// # async fn main() {
 /// use mea::semaphore::Semaphore;
 ///
@@ -129,15 +130,16 @@ mod tests;
 /// use std::fs::File;
 /// use std::io::Result;
 /// use std::io::Write;
+/// use std::sync::LazyLock;
 ///
 /// use mea::semaphore::Semaphore;
 ///
-/// static PERMITS: Semaphore = Semaphore::new(100);
+/// static PERMITS: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(100));
 ///
 /// async fn write_to_file(message: &[u8]) -> Result<()> {
 ///     let _permit = PERMITS.acquire(1).await;
 ///     let mut buffer = File::create("example.txt")?;
-///     buffer.write_all(message).await?;
+///     buffer.write_all(message)?;
 ///     Ok(()) // Permit goes out of scope here, and is available again for acquisition
 /// }
 /// ```
@@ -266,7 +268,7 @@ impl Semaphore {
     /// # Examples
     ///
     /// ```
-    /// # #[pollster::main]
+    /// # #[tokio::main]
     /// # async fn main() {
     /// use std::sync::Arc;
     ///

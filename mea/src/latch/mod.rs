@@ -21,7 +21,7 @@
 //! # Examples
 //!
 //! ```
-//! # #[pollster::main]
+//! # #[tokio::main]
 //! # async fn main() {
 //! use std::sync::Arc;
 //!
@@ -65,7 +65,7 @@ mod tests;
 /// # Examples
 ///
 /// ```
-/// # #[pollster::main]
+/// # #[tokio::main]
 /// # async fn main() {
 /// use std::sync::Arc;
 ///
@@ -215,7 +215,7 @@ impl Latch {
     /// # Examples
     ///
     /// ```
-    /// # #[pollster::main]
+    /// # #[tokio::main]
     /// # async fn main() {
     /// use std::sync::Arc;
     ///

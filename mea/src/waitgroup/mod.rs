@@ -21,7 +21,7 @@
 //! # Examples
 //!
 //! ```
-//! # #[pollster::main]
+//! # #[tokio::main]
 //! # async fn main() {
 //! use std::time::Duration;
 //!
@@ -67,7 +67,7 @@ mod tests;
 /// # Examples
 ///
 /// ```
-/// # #[pollster::main]
+/// # #[tokio::main]
 /// # async fn main() {
 /// use std::time::Duration;
 ///
