@@ -139,24 +139,11 @@ impl<T: ?Sized> Mutex<T> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use std::sync::Arc;
-    ///
     /// use mea::mutex::Mutex;
-    /// let mutex = Arc::new(Mutex::new(1));
-    /// let mutex2 = mutex.clone();
+    /// let mutex = Mutex::new(1);
     ///
-    /// let handle = tokio::spawn(async move {
-    ///     let mut lock = mutex2.lock().await;
-    ///     *lock += 1;
-    /// });
-    ///
-    /// let mut lock = mutex.lock().await;
-    /// *lock *= 2;
-    /// drop(lock); // Release the lock
-    ///
-    /// handle.await.unwrap();
-    /// let lock = mutex.lock().await;
-    /// assert_eq!(*lock, 3); // (1 * 2) + 1
+    /// let mut n = mutex.lock().await;
+    /// *n = 2;
     /// # }
     /// ```
     pub async fn lock(&self) -> MutexGuard<'_, T> {
