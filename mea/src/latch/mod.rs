@@ -235,11 +235,12 @@ impl Latch {
     /// handle.await.unwrap();
     /// # }
     /// ```
-    pub fn wait(&self) -> LatchWait<'_> {
-        LatchWait {
+    pub async fn wait(&self) {
+        let fut = LatchWait {
             idx: None,
             latch: self,
-        }
+        };
+        fut.await
     }
 }
 

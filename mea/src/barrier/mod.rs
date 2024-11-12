@@ -142,6 +142,47 @@ impl fmt::Debug for BarrierState {
     }
 }
 
+/// A `BarrierWaitResult` is returned by [`Barrier::wait()`] when all threads
+/// in the [`Barrier`] have rendezvoused.
+///
+/// # Examples
+///
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// use mea::barrier::Barrier;
+///
+/// let barrier = Barrier::new(1);
+/// let barrier_wait_result = barrier.wait().await;
+/// # }
+/// ```
+pub struct BarrierWaitResult(bool);
+
+impl BarrierWaitResult {
+    /// Returns `true` if this worker is the "leader" for the call to [`Barrier::wait()`].
+    ///
+    /// Only one worker will have `true` returned from their result, all other
+    /// workers will have `false` returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use mea::barrier::Barrier;
+    ///
+    /// let barrier = Barrier::new(1);
+    /// let barrier_wait_result = barrier.wait().await;
+    /// println!("{:?}", barrier_wait_result.is_leader());
+    /// # }
+    /// ```
+    #[stable(feature = "rust1", since = "1.0.0")]
+    #[must_use]
+    pub fn is_leader(&self) -> bool {
+        self.0
+    }
+}
+
 impl Barrier {
     /// Creates a new barrier that can block the specified number of tasks.
     ///
@@ -208,7 +249,7 @@ impl Barrier {
     /// handle.await.unwrap();
     /// # }
     /// ```
-    pub async fn wait(&self) -> bool {
+    pub async fn wait(&self) -> BarrierWaitResult {
         let generation = {
             let mut state = self.state.lock();
             let generation = state.generation;
@@ -220,7 +261,7 @@ impl Barrier {
                 state.arrived = 0;
                 state.generation += 1;
                 state.waiters.wake_all();
-                return true;
+                return BarrierWaitResult(true);
             }
 
             generation
@@ -232,7 +273,7 @@ impl Barrier {
             barrier: self,
         };
         fut.await;
-        false
+        BarrierWaitResult(false)
     }
 }
 
