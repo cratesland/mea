@@ -98,12 +98,14 @@ impl Semaphore {
     }
 
     /// Acquires `n` permits from the semaphore.
-    pub(crate) fn acquire(&self, n: u32) -> Acquire<'_> {
-        Acquire {
+    pub(crate) async fn acquire(&self, n: u32) {
+        let fut = Acquire {
             permits: n,
             index: None,
             semaphore: self,
-        }
+            done: false,
+        };
+        fut.await
     }
 
     /// Adds `n` new permits to the semaphore.
@@ -162,6 +164,7 @@ pub(crate) struct Acquire<'a> {
     permits: u32,
     index: Option<usize>,
     semaphore: &'a Semaphore,
+    done: bool,
 }
 
 impl Drop for Acquire<'_> {
@@ -190,7 +193,12 @@ impl Future for Acquire<'_> {
             permits,
             index,
             semaphore,
+            done,
         } = self.get_mut();
+
+        if *done {
+            return Poll::Ready(());
+        }
 
         match index {
             Some(idx) => {
@@ -214,6 +222,7 @@ impl Future for Acquire<'_> {
 
                 if ready {
                     *index = None;
+                    *done = true;
                     return Poll::Ready(());
                 }
             }
@@ -256,6 +265,7 @@ impl Future for Acquire<'_> {
                         Ok(_) => {
                             acquired += acq;
                             if remaining == 0 {
+                                *done = true;
                                 return Poll::Ready(());
                             }
                             break lock.expect("lock not acquired");
