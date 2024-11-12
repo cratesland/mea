@@ -147,11 +147,8 @@ impl<T: ?Sized> Mutex<T> {
     /// # }
     /// ```
     pub async fn lock(&self) -> MutexGuard<'_, T> {
-        let fut = async {
-            self.s.acquire(1).await;
-            MutexGuard { lock: self }
-        };
-        fut.await
+        self.s.acquire(1).await;
+        MutexGuard { lock: self }
     }
 
     /// Attempts to acquire the lock, and returns `None` if the lock is currently held somewhere
