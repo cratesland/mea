@@ -24,12 +24,12 @@ fn zero_does_not_block() {
     {
         let mut f = spawn(b.wait());
         let leader = assert_ready!(f.poll());
-        assert!(leader);
+        assert!(leader.is_leader());
     }
     {
         let mut f = spawn(b.wait());
         let leader = assert_ready!(f.poll());
-        assert!(leader);
+        assert!(leader.is_leader());
     }
 }
 
@@ -39,17 +39,17 @@ fn single() {
     {
         let mut f = spawn(b.wait());
         let leader = assert_ready!(f.poll());
-        assert!(leader);
+        assert!(leader.is_leader());
     }
     {
         let mut f = spawn(b.wait());
         let leader = assert_ready!(f.poll());
-        assert!(leader);
+        assert!(leader.is_leader());
     }
     {
         let mut f = spawn(b.wait());
         let leader = assert_ready!(f.poll());
-        assert!(leader);
+        assert!(leader.is_leader());
     }
 }
 
@@ -61,8 +61,8 @@ fn tango() {
     assert_pending!(f1.poll());
 
     let mut f2 = spawn(b.wait());
-    let f2_leader = assert_ready!(f2.poll());
-    let f1_leader = assert_ready!(f1.poll());
+    let f2_leader = assert_ready!(f2.poll()).is_leader();
+    let f1_leader = assert_ready!(f1.poll()).is_leader();
 
     assert!(f1_leader || f2_leader);
     assert!(!(f1_leader && f2_leader));
@@ -86,10 +86,10 @@ fn lots() {
 
         // pass the barrier
         let mut f = spawn(b.wait());
-        let mut found_leader = assert_ready!(f.poll());
+        let mut found_leader = assert_ready!(f.poll()).is_leader();
         for mut f in wait {
             let leader = assert_ready!(f.poll());
-            if leader {
+            if leader.is_leader() {
                 assert!(!found_leader);
                 found_leader = true;
             }

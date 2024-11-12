@@ -34,8 +34,8 @@
 //!     let barrier = barrier.clone();
 //!     handles.push(tokio::spawn(async move {
 //!         println!("Task {} before barrier", i);
-//!         let is_leader = barrier.wait().await;
-//!         println!("Task {} after barrier (leader: {})", i, is_leader);
+//!         let result = barrier.wait().await;
+//!         println!("Task {} after barrier (leader: {})", i, result.is_leader());
 //!     }));
 //! }
 //!
@@ -48,8 +48,8 @@
 //!     let barrier = barrier.clone();
 //!     handles.push(tokio::spawn(async move {
 //!         println!("Task {} before barrier", i);
-//!         let is_leader = barrier.wait().await;
-//!         println!("Task {} after barrier (leader: {})", i, is_leader);
+//!         let result = barrier.wait().await;
+//!         println!("Task {} after barrier (leader: {})", i, result.is_leader());
 //!     }));
 //! }
 //!
@@ -95,8 +95,8 @@ mod tests;
 ///     let barrier = barrier.clone();
 ///     handles.push(tokio::spawn(async move {
 ///         println!("Task {} before barrier", i);
-///         let is_leader = barrier.wait().await;
-///         println!("Task {} after barrier (leader: {})", i, is_leader);
+///         let result = barrier.wait().await;
+///         println!("Task {} after barrier (leader: {})", i, result.is_leader());
 ///     }));
 /// }
 ///
@@ -109,8 +109,8 @@ mod tests;
 ///     let barrier = barrier.clone();
 ///     handles.push(tokio::spawn(async move {
 ///         println!("Task {} before barrier", i);
-///         let is_leader = barrier.wait().await;
-///         println!("Task {} after barrier (leader: {})", i, is_leader);
+///         let result = barrier.wait().await;
+///         println!("Task {} after barrier (leader: {})", i, result.is_leader());
 ///     }));
 /// }
 ///
@@ -156,6 +156,7 @@ impl fmt::Debug for BarrierState {
 /// let barrier_wait_result = barrier.wait().await;
 /// # }
 /// ```
+#[derive(Debug)]
 pub struct BarrierWaitResult(bool);
 
 impl BarrierWaitResult {
@@ -176,7 +177,6 @@ impl BarrierWaitResult {
     /// println!("{:?}", barrier_wait_result.is_leader());
     /// # }
     /// ```
-    #[stable(feature = "rust1", since = "1.0.0")]
     #[must_use]
     pub fn is_leader(&self) -> bool {
         self.0
@@ -240,12 +240,12 @@ impl Barrier {
     /// let barrier2 = barrier.clone();
     ///
     /// let handle = tokio::spawn(async move {
-    ///     let is_leader = barrier2.wait().await;
-    ///     println!("Task 1: leader = {}", is_leader);
+    ///     let result = barrier2.wait().await;
+    ///     println!("Task 1: leader = {}", result.is_leader());
     /// });
     ///
-    /// let is_leader = barrier.wait().await;
-    /// println!("Task 2: leader = {}", is_leader);
+    /// let result = barrier.wait().await;
+    /// println!("Task 2: leader = {}", result.is_leader());
     /// handle.await.unwrap();
     /// # }
     /// ```
