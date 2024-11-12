@@ -156,8 +156,15 @@ impl fmt::Debug for BarrierState {
 /// let barrier_wait_result = barrier.wait().await;
 /// # }
 /// ```
-#[derive(Debug)]
 pub struct BarrierWaitResult(bool);
+
+impl fmt::Debug for BarrierWaitResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("BarrierWaitResult")
+            .field("is_leader", &self.is_leader())
+            .finish()
+    }
+}
 
 impl BarrierWaitResult {
     /// Returns `true` if this worker is the "leader" for the call to [`Barrier::wait()`].
