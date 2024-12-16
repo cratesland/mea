@@ -209,6 +209,13 @@ pub struct MutexGuard<'a, T: ?Sized> {
     lock: &'a Mutex<T>,
 }
 
+impl<'a, T: ?Sized> MutexGuard<'a, T> {
+    /// Returns a reference to the mutex a guard came from.
+    pub fn source(guard: &MutexGuard<'a, T>) -> &'a Mutex<T> {
+        guard.lock
+    }
+}
+
 impl<T: ?Sized + fmt::Debug> fmt::Debug for MutexGuard<'_, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(&**self, f)

@@ -51,6 +51,7 @@
 mod internal;
 
 pub mod barrier;
+pub mod condvar;
 pub mod latch;
 pub mod mutex;
 pub mod semaphore;
