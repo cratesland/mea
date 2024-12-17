@@ -12,7 +12,57 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! An asynchronous reader-writer lock.
+//! A reader-writer lock that allows multiple readers or a single writer at a time.
+//!
+//! This type of lock allows a number of readers or at most one writer at any point in time. The
+//! write portion of this lock typically allows modification of the underlying data (exclusive
+//! access) and the read portion of this lock typically allows for read-only access (shared access).
+//!
+//! In comparison, a [`Mutex`] does not distinguish between readers or writers that acquire the
+//! lock, therefore causing any tasks waiting for the lock to become available to yield. An RwLock
+//! will allow any number of readers to acquire the lock as long as a writer is not holding the
+//! lock.
+//!
+//! The priority policy of Tokio's read-write lock is fair (or [write-preferring]), in order to
+//! ensure that readers cannot starve writers. Fairness is ensured using a first-in, first-out queue
+//! for the tasks awaiting the lock; if a task that wishes to acquire the write lock is at the head
+//! of the queue, read locks will not be given out until the write lock has been released. This is
+//! in contrast to the Rust standard library's `std::sync::RwLock`, where the priority policy is
+//! dependent on the operating system's implementation.
+//!
+//! The type parameter `T` represents the data that this lock protects. It is required that `T`
+//! satisfies [`Send`] to be shared across threads. The RAII guards returned from the locking
+//! methods implement [`Deref`] (and [`DerefMut`] for the `write` method) to allow access to the
+//! content of the lock.
+//!
+//! # Examples
+//!
+//! ```
+//! # #[tokio::main]
+//! # async fn main() {
+//! use mea::rwlock::RwLock;
+//!
+//! let lock = RwLock::new(5);
+//!
+//! // many reader locks can be held at once
+//! {
+//!     let r1 = lock.read().await;
+//!     let r2 = lock.read().await;
+//!     assert_eq!(*r1, 5);
+//!     assert_eq!(*r2, 5);
+//! } // read locks are dropped at this point
+//!
+//! // only one write lock may be held, however
+//! {
+//!     let mut w = lock.write().await;
+//!     *w += 1;
+//!     assert_eq!(*w, 6);
+//! } // write lock is dropped here
+//! # }
+//! ```
+//!
+//! [`Mutex`]: crate::mutex::Mutex
+//! [write-preferring]: https://en.wikipedia.org/wiki/Readers%E2%80%93writer_lock#Priority_policies
 
 use std::cell::UnsafeCell;
 use std::fmt;
@@ -21,7 +71,9 @@ use std::ops::DerefMut;
 
 use crate::internal::Semaphore;
 
-/// An asynchronous reader-writer lock.
+/// A reader-writer lock that allows multiple readers or a single writer at a time.
+///
+/// See the [module level documentation](self) for more.
 pub struct RwLock<T: ?Sized> {
     /// Maximum number of concurrent readers.
     max_readers: u32,

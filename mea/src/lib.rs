@@ -25,9 +25,10 @@
 //!
 //! * [`Barrier`]: A synchronization point where multiple tasks can wait until all participants
 //!   arrive
-//! * [`Condvar`]: A condition variable that allows tasks to wait for a notification.
+//! * [`Condvar`]: A condition variable that allows tasks to wait for a notification
 //! * [`Latch`]: A single-use barrier that allows one or more tasks to wait until a signal is given
 //! * [`Mutex`]: A mutual exclusion primitive for protecting shared data
+//! * [`RwLock`]: A reader-writer lock that allows multiple readers or a single writer at a time
 //! * [`Semaphore`]: A synchronization primitive that controls access to a shared resource
 //! * [`WaitGroup`]: A synchronization primitive that allows waiting for multiple tasks to complete
 //!
