@@ -146,8 +146,10 @@ impl Semaphore {
             if rem > 0 && waiters.is_empty() {
                 let permits = rem;
                 let prev = self.permits.fetch_add(permits, Ordering::Release);
-                // never happens; permits is always zero and permits is no more than u32::MAX
-                debug_assert!(prev.checked_add(permits).is_some());
+                assert!(
+                    prev.checked_add(permits).is_some(),
+                    "number of added permits ({permits}) would overflow u32::MAX (prev: {prev})"
+                );
                 rem = 0;
             }
 
