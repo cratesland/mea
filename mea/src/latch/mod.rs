@@ -18,6 +18,10 @@
 //! This makes it ideal for scenarios where you need to wait for a specific number of events or
 //! operations to complete.
 //!
+//! A latch starts with an initial count and tasks can wait for this count to reach zero.
+//! The count can be decremented by calling [`count_down()`] or [`arrive()`]. Once the count
+//! reaches zero, all waiting tasks are unblocked.
+//!
 //! # Examples
 //!
 //! ```
@@ -44,6 +48,9 @@
 //! println!("All tasks completed");
 //! # }
 //! ```
+//!
+//! [`count_down()`]: Latch::count_down
+//! [`arrive()`]: Latch::arrive
 
 use std::fmt;
 use std::future::Future;
@@ -58,44 +65,7 @@ mod tests;
 
 /// A synchronization primitive that can be used to coordinate multiple tasks.
 ///
-/// A latch starts with an initial count and tasks can wait for this count to reach zero.
-/// The count can be decremented by calling [`count_down()`] or [`arrive()`]. Once the count
-/// reaches zero, all waiting tasks are unblocked.
-///
-/// # Examples
-///
-/// ```
-/// # #[tokio::main]
-/// # async fn main() {
-/// use std::sync::Arc;
-///
-/// use mea::latch::Latch;
-///
-/// let latch = Arc::new(Latch::new(3));
-/// let mut handles = Vec::new();
-///
-/// // Spawn tasks that will count down the latch
-/// for i in 0..3 {
-///     let latch = latch.clone();
-///     handles.push(tokio::spawn(async move {
-///         // Do some work
-///         println!("Task {} completing", i);
-///         latch.count_down();
-///     }));
-/// }
-///
-/// // Wait for all tasks to complete
-/// latch.wait().await;
-/// println!("All tasks completed!");
-///
-/// for handle in handles {
-///     handle.await.unwrap();
-/// }
-/// # }
-/// ```
-///
-/// [`count_down()`]: Latch::count_down
-/// [`arrive()`]: Latch::arrive
+/// See the [module level documentation](self) for more.
 #[derive(Debug)]
 pub struct Latch {
     state: CountdownState,

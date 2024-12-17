@@ -23,12 +23,13 @@
 //!
 //! ## Features
 //!
-//! * [`Barrier`] - A synchronization point where multiple tasks can wait until all participants
+//! * [`Barrier`]: A synchronization point where multiple tasks can wait until all participants
 //!   arrive
-//! * [`Latch`] - A single-use barrier that allows one or more tasks to wait until a signal is given
-//! * [`Mutex`] - A mutual exclusion primitive for protecting shared data
-//! * [`Semaphore`] - A synchronization primitive that controls access to a shared resource
-//! * [`WaitGroup`] - A synchronization primitive that allows waiting for multiple tasks to complete
+//! * [`Condvar`]: A condition variable that allows tasks to wait for a notification.
+//! * [`Latch`]: A single-use barrier that allows one or more tasks to wait until a signal is given
+//! * [`Mutex`]: A mutual exclusion primitive for protecting shared data
+//! * [`Semaphore`]: A synchronization primitive that controls access to a shared resource
+//! * [`WaitGroup`]: A synchronization primitive that allows waiting for multiple tasks to complete
 //!
 //! ## Runtime Agnostic
 //!
@@ -43,6 +44,7 @@
 //! multiple threads.
 //!
 //! [`Barrier`]: barrier::Barrier
+//! [`Condvar`]: condvar::Condvar
 //! [`Latch`]: latch::Latch
 //! [`Mutex`]: mutex::Mutex
 //! [`Semaphore`]: semaphore::Semaphore
@@ -51,6 +53,7 @@
 mod internal;
 
 pub mod barrier;
+pub mod condvar;
 pub mod latch;
 pub mod mutex;
 pub mod semaphore;
@@ -68,14 +71,24 @@ fn test_runtime() -> &'static tokio::runtime::Runtime {
 #[cfg(test)]
 mod tests {
     use crate::barrier::Barrier;
+    use crate::condvar::Condvar;
     use crate::latch::Latch;
+    use crate::mutex::Mutex;
+    use crate::semaphore::Semaphore;
     use crate::waitgroup::WaitGroup;
 
     #[test]
     fn send_and_sync() {
         fn assert_send_and_sync<T: Send + Sync>() {}
         assert_send_and_sync::<Barrier>();
+        assert_send_and_sync::<Condvar>();
         assert_send_and_sync::<Latch>();
+        assert_send_and_sync::<Semaphore>();
         assert_send_and_sync::<WaitGroup>();
+
+        assert_send_and_sync::<Mutex<i32>>();
+        assert_send_and_sync::<Mutex<u32>>();
+        assert_send_and_sync::<Mutex<i64>>();
+        assert_send_and_sync::<Mutex<u64>>();
     }
 }
