@@ -23,12 +23,13 @@
 //!
 //! ## Features
 //!
-//! * [`Barrier`] - A synchronization point where multiple tasks can wait until all participants
+//! * [`Barrier`]: A synchronization point where multiple tasks can wait until all participants
 //!   arrive
-//! * [`Latch`] - A single-use barrier that allows one or more tasks to wait until a signal is given
-//! * [`Mutex`] - A mutual exclusion primitive for protecting shared data
-//! * [`Semaphore`] - A synchronization primitive that controls access to a shared resource
-//! * [`WaitGroup`] - A synchronization primitive that allows waiting for multiple tasks to complete
+//! * [`Condvar`]: A condition variable that allows tasks to wait for a notification.
+//! * [`Latch`]: A single-use barrier that allows one or more tasks to wait until a signal is given
+//! * [`Mutex`]: A mutual exclusion primitive for protecting shared data
+//! * [`Semaphore`]: A synchronization primitive that controls access to a shared resource
+//! * [`WaitGroup`]: A synchronization primitive that allows waiting for multiple tasks to complete
 //!
 //! ## Runtime Agnostic
 //!
@@ -43,6 +44,7 @@
 //! multiple threads.
 //!
 //! [`Barrier`]: barrier::Barrier
+//! [`Condvar`]: condvar::Condvar
 //! [`Latch`]: latch::Latch
 //! [`Mutex`]: mutex::Mutex
 //! [`Semaphore`]: semaphore::Semaphore

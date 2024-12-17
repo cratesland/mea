@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! A Condition Variable.
+//! A condition variable that allows tasks to wait for a notification.
 //!
 //! # Examples
 //!
@@ -60,7 +60,7 @@ use crate::mutex::MutexGuard;
 #[cfg(test)]
 mod tests;
 
-/// A Condition Variable.
+/// A condition variable that allows tasks to wait for a notification.
 ///
 /// See the [module level documentation](self) for more.
 pub struct Condvar {
