@@ -55,6 +55,7 @@ use std::task::Waker;
 use slab::Slab;
 
 use crate::internal::Mutex;
+use crate::mutex;
 use crate::mutex::MutexGuard;
 
 #[cfg(test)]
@@ -115,7 +116,7 @@ impl Condvar {
     /// Unlike the std equivalent, this does not check that a single mutex is used at runtime.
     /// However, as a best practice avoid using with multiple mutexes.
     pub async fn wait<'a, T>(&self, guard: MutexGuard<'a, T>) -> MutexGuard<'a, T> {
-        let mutex = MutexGuard::source(&guard);
+        let mutex = mutex::guard_lock(&guard);
 
         let fut = AwaitNotify {
             cond: self,

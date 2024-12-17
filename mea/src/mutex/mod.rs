@@ -189,10 +189,15 @@ pub struct MutexGuard<'a, T: ?Sized> {
     lock: &'a Mutex<T>,
 }
 
-impl<'a, T: ?Sized> MutexGuard<'a, T> {
-    /// Returns a reference to the mutex a guard came from.
-    pub fn source(guard: &MutexGuard<'a, T>) -> &'a Mutex<T> {
-        guard.lock
+pub(crate) fn guard_lock<'a, T: ?Sized>(guard: &MutexGuard<'a, T>) -> &'a Mutex<T> {
+    guard.lock
+}
+
+unsafe impl<T> Sync for MutexGuard<'_, T> where T: ?Sized + Send + Sync {}
+
+impl<T: ?Sized> Drop for MutexGuard<'_, T> {
+    fn drop(&mut self) {
+        self.lock.s.release(1);
     }
 }
 
@@ -202,9 +207,9 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for MutexGuard<'_, T> {
     }
 }
 
-impl<T: ?Sized> Drop for MutexGuard<'_, T> {
-    fn drop(&mut self) {
-        self.lock.s.release(1);
+impl<T: ?Sized + fmt::Display> fmt::Display for MutexGuard<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&**self, f)
     }
 }
 

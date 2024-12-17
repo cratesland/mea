@@ -56,6 +56,7 @@ pub mod barrier;
 pub mod condvar;
 pub mod latch;
 pub mod mutex;
+pub mod rwlock;
 pub mod semaphore;
 pub mod waitgroup;
 
@@ -74,6 +75,10 @@ mod tests {
     use crate::condvar::Condvar;
     use crate::latch::Latch;
     use crate::mutex::Mutex;
+    use crate::mutex::MutexGuard;
+    use crate::rwlock::RwLock;
+    use crate::rwlock::RwLockReadGuard;
+    use crate::rwlock::RwLockWriteGuard;
     use crate::semaphore::Semaphore;
     use crate::waitgroup::WaitGroup;
 
@@ -86,9 +91,10 @@ mod tests {
         assert_send_and_sync::<Semaphore>();
         assert_send_and_sync::<WaitGroup>();
 
-        assert_send_and_sync::<Mutex<i32>>();
-        assert_send_and_sync::<Mutex<u32>>();
         assert_send_and_sync::<Mutex<i64>>();
-        assert_send_and_sync::<Mutex<u64>>();
+        assert_send_and_sync::<MutexGuard<'_, i64>>();
+        assert_send_and_sync::<RwLock<i64>>();
+        assert_send_and_sync::<RwLockReadGuard<'_, i64>>();
+        assert_send_and_sync::<RwLockWriteGuard<'_, i64>>();
     }
 }
