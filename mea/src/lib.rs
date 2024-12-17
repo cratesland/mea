@@ -25,9 +25,10 @@
 //!
 //! * [`Barrier`]: A synchronization point where multiple tasks can wait until all participants
 //!   arrive
-//! * [`Condvar`]: A condition variable that allows tasks to wait for a notification.
+//! * [`Condvar`]: A condition variable that allows tasks to wait for a notification
 //! * [`Latch`]: A single-use barrier that allows one or more tasks to wait until a signal is given
 //! * [`Mutex`]: A mutual exclusion primitive for protecting shared data
+//! * [`RwLock`]: A reader-writer lock that allows multiple readers or a single writer at a time
 //! * [`Semaphore`]: A synchronization primitive that controls access to a shared resource
 //! * [`WaitGroup`]: A synchronization primitive that allows waiting for multiple tasks to complete
 //!
@@ -56,6 +57,7 @@ pub mod barrier;
 pub mod condvar;
 pub mod latch;
 pub mod mutex;
+pub mod rwlock;
 pub mod semaphore;
 pub mod waitgroup;
 
@@ -74,6 +76,10 @@ mod tests {
     use crate::condvar::Condvar;
     use crate::latch::Latch;
     use crate::mutex::Mutex;
+    use crate::mutex::MutexGuard;
+    use crate::rwlock::RwLock;
+    use crate::rwlock::RwLockReadGuard;
+    use crate::rwlock::RwLockWriteGuard;
     use crate::semaphore::Semaphore;
     use crate::waitgroup::WaitGroup;
 
@@ -86,9 +92,10 @@ mod tests {
         assert_send_and_sync::<Semaphore>();
         assert_send_and_sync::<WaitGroup>();
 
-        assert_send_and_sync::<Mutex<i32>>();
-        assert_send_and_sync::<Mutex<u32>>();
         assert_send_and_sync::<Mutex<i64>>();
-        assert_send_and_sync::<Mutex<u64>>();
+        assert_send_and_sync::<MutexGuard<'_, i64>>();
+        assert_send_and_sync::<RwLock<i64>>();
+        assert_send_and_sync::<RwLockReadGuard<'_, i64>>();
+        assert_send_and_sync::<RwLockWriteGuard<'_, i64>>();
     }
 }
