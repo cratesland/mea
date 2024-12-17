@@ -18,6 +18,12 @@
 //! This is useful for scenarios where multiple tasks need to proceed together after reaching a
 //! certain point in their execution.
 //!
+//! A barrier enables multiple tasks to synchronize the beginning of some computation.
+//! When a barrier is created, it is initialized with a count of the number of tasks
+//! that will synchronize on the barrier. Each task can then call [`wait()`] on the
+//! barrier to indicate it is ready to proceed. The barrier ensures that no task
+//! proceeds past the barrier point until all tasks have made the call.
+//!
 //! # Examples
 //!
 //! ```
@@ -58,6 +64,8 @@
 //! }
 //! # }
 //! ```
+//!
+//! [`wait()`]: Barrier::wait
 
 use std::fmt;
 use std::future::Future;
@@ -73,54 +81,7 @@ mod tests;
 
 /// A synchronization primitive for multiple tasks that need to wait for each other.
 ///
-/// A barrier enables multiple tasks to synchronize the beginning of some computation.
-/// When a barrier is created, it is initialized with a count of the number of tasks
-/// that will synchronize on the barrier. Each task can then call [`wait()`] on the
-/// barrier to indicate it is ready to proceed. The barrier ensures that no task
-/// proceeds past the barrier point until all tasks have made the call.
-///
-/// # Examples
-///
-/// ```
-/// # #[tokio::main]
-/// # async fn main() {
-/// use std::sync::Arc;
-///
-/// use mea::barrier::Barrier;
-///
-/// let barrier = Arc::new(Barrier::new(3));
-/// let mut handles = Vec::new();
-///
-/// for i in 0..3 {
-///     let barrier = barrier.clone();
-///     handles.push(tokio::spawn(async move {
-///         println!("Task {} before barrier", i);
-///         let result = barrier.wait().await;
-///         println!("Task {} after barrier (leader: {})", i, result.is_leader());
-///     }));
-/// }
-///
-/// for handle in std::mem::take(&mut handles) {
-///     handle.await.unwrap();
-/// }
-///
-/// // The barrier can be reused (generation is increased).
-/// for i in 0..3 {
-///     let barrier = barrier.clone();
-///     handles.push(tokio::spawn(async move {
-///         println!("Task {} before barrier", i);
-///         let result = barrier.wait().await;
-///         println!("Task {} after barrier (leader: {})", i, result.is_leader());
-///     }));
-/// }
-///
-/// for handle in handles {
-///     handle.await.unwrap();
-/// }
-/// # }
-/// ```
-///
-/// [`wait()`]: Barrier::wait
+/// See the [module level documentation](self) for more.
 #[derive(Debug)]
 pub struct Barrier {
     n: u32,

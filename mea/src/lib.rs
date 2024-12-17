@@ -69,14 +69,24 @@ fn test_runtime() -> &'static tokio::runtime::Runtime {
 #[cfg(test)]
 mod tests {
     use crate::barrier::Barrier;
+    use crate::condvar::Condvar;
     use crate::latch::Latch;
+    use crate::mutex::Mutex;
+    use crate::semaphore::Semaphore;
     use crate::waitgroup::WaitGroup;
 
     #[test]
     fn send_and_sync() {
         fn assert_send_and_sync<T: Send + Sync>() {}
         assert_send_and_sync::<Barrier>();
+        assert_send_and_sync::<Condvar>();
         assert_send_and_sync::<Latch>();
+        assert_send_and_sync::<Semaphore>();
         assert_send_and_sync::<WaitGroup>();
+
+        assert_send_and_sync::<Mutex<i32>>();
+        assert_send_and_sync::<Mutex<u32>>();
+        assert_send_and_sync::<Mutex<i64>>();
+        assert_send_and_sync::<Mutex<u64>>();
     }
 }

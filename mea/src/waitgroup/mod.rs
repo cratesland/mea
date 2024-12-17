@@ -18,6 +18,10 @@
 //! tasks to finish. Each task holds a handle to the WaitGroup, and the main task
 //! can wait for all handles to be dropped before proceeding.
 //!
+//! A WaitGroup waits for a collection of tasks to finish. The main task calls
+//! [`clone()`] to create a new worker handle for each task, and can then wait
+//! for all tasks to complete by calling `.await` on the WaitGroup.
+//!
 //! # Examples
 //!
 //! ```
@@ -44,6 +48,8 @@
 //! println!("All tasks completed");
 //! # }
 //! ```
+//!
+//! [`clone()`]: WaitGroup::clone
 
 use std::fmt;
 use std::future::Future;
@@ -58,51 +64,9 @@ use crate::internal::CountdownState;
 #[cfg(test)]
 mod tests;
 
-/// A synchronization primitive that allows waiting for multiple tasks to complete.
+/// A synchronization primitive for waiting on multiple tasks to complete.
 ///
-/// A WaitGroup waits for a collection of tasks to finish. The main task calls
-/// [`clone()`] to create a new worker handle for each task, and can then wait
-/// for all tasks to complete by calling `.await` on the WaitGroup.
-///
-/// # Examples
-///
-/// ```
-/// # #[tokio::main]
-/// # async fn main() {
-/// use std::time::Duration;
-///
-/// use mea::waitgroup::WaitGroup;
-///
-/// let wg = WaitGroup::new();
-/// let mut handles = Vec::new();
-///
-/// // Spawn multiple tasks
-/// for i in 0..3 {
-///     let wg = wg.clone(); // Create a new worker handle
-///     handles.push(tokio::spawn(async move {
-///         // Simulate some work
-///         tokio::time::sleep(Duration::from_millis(100)).await;
-///         println!("Task {} completed", i);
-///         // Wait until all tasks have finished
-///         wg.await
-///         // Or 'wg' is automatically decremented when dropped
-///         // drop(wg);
-///     }));
-/// }
-///
-/// // Wait for all tasks to complete
-/// wg.await;
-///
-/// // All tasks have finished
-/// println!("All tasks completed");
-///
-/// for handle in handles {
-///     handle.await.unwrap();
-/// }
-/// # }
-/// ```
-///
-/// [`clone()`]: WaitGroup::clone
+/// See the [module level documentation](self) for more.
 pub struct WaitGroup {
     state: Arc<CountdownState>,
 }

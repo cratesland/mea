@@ -18,6 +18,10 @@
 //! ensuring tasks yield properly when the lock is contended. This makes it suitable
 //! for protecting shared resources in async code.
 //!
+//! This mutex will block tasks waiting for the lock to become available. The
+//! mutex can be created via [`new`] and the protected data can be accessed
+//! via the async [`lock`] method.
+//!
 //! # Examples
 //!
 //! ```
@@ -37,8 +41,18 @@
 //!         *lock += i;
 //!     }));
 //! }
-//! # }
+//!
+//! for handle in handles {
+//!     handle.await.unwrap();
+//! }
+//!
+//! let final_value = mutex.lock().await;
+//! assert_eq!(*final_value, 3); // 0 + 1 + 2
+//! #  }
 //! ```
+//!
+//! [`new`]: Mutex::new
+//! [`lock`]: Mutex::lock
 
 use std::cell::UnsafeCell;
 use std::fmt;
@@ -49,41 +63,7 @@ use crate::internal;
 
 /// An async mutex for protecting shared data.
 ///
-/// This mutex will block tasks waiting for the lock to become available. The
-/// mutex can be created via [`new`] and the protected data can be accessed
-/// via the async [`lock`] method.
-///
-/// # Examples
-///
-/// ```
-/// # #[tokio::main]
-/// # async fn main() {
-/// use std::sync::Arc;
-///
-/// use mea::mutex::Mutex;
-///
-/// let mutex = Arc::new(Mutex::new(0));
-/// let mut handles = vec![];
-///
-/// for i in 0..3 {
-///     let mutex = mutex.clone();
-///     handles.push(tokio::spawn(async move {
-///         let mut lock = mutex.lock().await;
-///         *lock += i;
-///     }));
-/// }
-///
-/// for handle in handles {
-///     handle.await.unwrap();
-/// }
-///
-/// let final_value = mutex.lock().await;
-/// assert_eq!(*final_value, 3); // 0 + 1 + 2
-/// #  }
-/// ```
-///
-/// [`new`]: Mutex::new
-/// [`lock`]: Mutex::lock
+/// See the [module level documentation](self) for more.
 #[derive(Debug)]
 pub struct Mutex<T: ?Sized> {
     s: internal::Semaphore,
