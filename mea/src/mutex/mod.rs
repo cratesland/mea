@@ -106,13 +106,17 @@ impl<T> Mutex<T> {
 }
 
 impl<T: ?Sized> Mutex<T> {
-    /// Locks this mutex, causing the current task to yield until the lock has
-    /// been acquired. When the lock has been acquired, function returns a
-    /// [`MutexGuard`].
+    /// Locks this mutex, causing the current task to yield until the lock has been acquired. When
+    /// the lock has been acquired, function returns a [`MutexGuard`].
     ///
-    /// This method is async and will yield the current task if the mutex is
-    /// currently held by another task. When the mutex becomes available, the
-    /// task will be woken up and given the lock.
+    /// This method is async and will yield the current task if the mutex is currently held by
+    /// another task. When the mutex becomes available, the task will be woken up and given the
+    /// lock.
+    ///
+    /// # Cancel safety
+    ///
+    /// This method uses a queue to fairly distribute locks in the order they were requested.
+    /// Cancelling a call to `lock` makes you lose your place in the queue.
     ///
     /// # Examples
     ///
