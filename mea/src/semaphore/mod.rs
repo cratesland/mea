@@ -201,9 +201,13 @@ impl Semaphore {
 
     /// Acquires `n` permits from the semaphore.
     ///
-    /// If the permits are not immediately available, this method will wait until
-    /// they become available. Returns a [`SemaphorePermit`] that will release the
-    /// permits when dropped.
+    /// If the permits are not immediately available, this method will wait until they become
+    /// available. Returns a [`SemaphorePermit`] that will release the permits when dropped.
+    ///
+    /// # Cancel safety
+    ///
+    /// This method uses a queue to fairly distribute permits in the order they were requested.
+    /// Cancelling a call to `acquire` makes you lose your place in the queue.
     ///
     /// # Examples
     ///
