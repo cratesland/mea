@@ -150,6 +150,25 @@ impl Semaphore {
         self.s.forget(n)
     }
 
+    /// Adds `n` new permits to the semaphore.
+    ///
+    /// # Panics
+    ///
+    /// Panics if adding the permits would cause the total number of permits to overflow.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mea::semaphore::Semaphore;
+    ///
+    /// let sem = Semaphore::new(0);
+    /// sem.release(2); // Adds 2 permits
+    /// assert_eq!(sem.available_permits(), 2);
+    /// ```
+    pub fn release(&self, permits: u32) {
+        self.s.release(permits);
+    }
+
     /// Attempts to acquire `n` permits from the semaphore without blocking.
     ///
     /// If the permits are successfully acquired, a [`SemaphorePermit`] is returned.
@@ -180,25 +199,6 @@ impl Semaphore {
         self.s
             .try_acquire(permits)
             .then_some(SemaphorePermit { sem: self, permits })
-    }
-
-    /// Adds `n` new permits to the semaphore.
-    ///
-    /// # Panics
-    ///
-    /// Panics if adding the permits would cause the total number of permits to overflow.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use mea::semaphore::Semaphore;
-    ///
-    /// let sem = Semaphore::new(0);
-    /// sem.release(2); // Adds 2 permits
-    /// assert_eq!(sem.available_permits(), 2);
-    /// ```
-    pub fn release(&self, permits: u32) {
-        self.s.release(permits);
     }
 
     /// Acquires `n` permits from the semaphore.
@@ -241,12 +241,46 @@ impl Semaphore {
         SemaphorePermit { sem: self, permits }
     }
 
+    /// Attempts to acquire `n` permits from the semaphore without blocking.
+    ///
+    /// The semaphore must be wrapped in an [`Arc`] to call this method.
+    ///
+    /// If the permits are successfully acquired, a [`OwnedSemaphorePermit`] is returned.
+    /// The permits will be automatically returned to the semaphore when the permit
+    /// is dropped, unless [`forget`] is called.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    ///
+    /// use mea::semaphore::Semaphore;
+    ///
+    /// let sem = Arc::new(Semaphore::new(2));
+    ///
+    /// let p1 = sem.clone().try_acquire_owned(1).unwrap();
+    /// assert_eq!(sem.available_permits(), 1);
+    ///
+    /// let p2 = sem.clone().try_acquire_owned(1).unwrap();
+    /// assert_eq!(sem.available_permits(), 0);
+    ///
+    /// let p3 = sem.try_acquire_owned(1);
+    /// assert!(p3.is_none());
+    /// ```
+    ///
+    /// [`forget`]: SemaphorePermit::forget
+    pub fn try_acquire_owned(self: Arc<Self>, permits: u32) -> Option<OwnedSemaphorePermit> {
+        self.s
+            .try_acquire(permits)
+            .then_some(OwnedSemaphorePermit { sem: self, permits })
+    }
+
     /// Acquires `n` permits from the semaphore.
     ///
     /// The semaphore must be wrapped in an [`Arc`] to call this method.
     ///
     /// If the permits are not immediately available, this method will wait until they become
-    /// available. Returns a [`SemaphorePermit`] that will release the permits when dropped.
+    /// available. Returns a [`OwnedSemaphorePermit`] that will release the permits when dropped.
     ///
     /// # Cancel safety
     ///
