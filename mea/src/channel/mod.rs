@@ -12,16 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::primitives::condvar::Condvar;
+use crate::primitives::mutex::Mutex;
+use futures_core::Stream;
 use std::collections::VecDeque;
 use std::error;
 use std::fmt;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::task::{ready, Context, Poll};
 
-use crate::primitives::condvar::Condvar;
-use crate::primitives::mutex::Mutex;
+#[cfg(test)]
+mod tests;
 
 pub fn unbounded<T>() -> (Sender<T>, Receiver<T>) {
     let shared = Arc::new(Shared::new(None));
@@ -79,6 +85,10 @@ struct Channel<T> {
 }
 
 impl<T> Channel<T> {
+    fn is_empty(&self) -> bool {
+        self.buffer.is_empty()
+    }
+
     fn is_full(&self) -> bool {
         self.capacity.map_or(false, |cap| self.buffer.len() >= cap)
     }
@@ -202,4 +212,50 @@ impl<T> Receiver<T> {
             channel = self.shared.receiver_wait.wait(channel).await;
         }
     }
+
+    // pub fn into_stream(self) -> ReceiverStream<T> {
+    //     ReceiverStream {
+    //         future: None,
+    //         receiver: self,
+    //     }
+    // }
 }
+
+// pub struct ReceiverStream<T> {
+//     future: Option<Pin<Box<dyn Future<Output = Result<T, RecvError>>>>>,
+//     receiver: Receiver<T>,
+// }
+//
+// impl<T> ReceiverStream<T> {
+//     fn is_terminated(&self) -> bool {
+//         self.receiver.shared.is_disconnected() && self.future.is_none()
+//     }
+// }
+//
+// impl<T> Stream for ReceiverStream<T> {
+//     type Item = T;
+//
+//     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+//         if self.is_terminated() {
+//             return Poll::Ready(None);
+//         }
+//
+//         let Self { future, receiver } = self.get_mut();
+//         if future.is_none() {
+//             let fut = Box::pin(receiver.recv());
+//             *future = Some(fut);
+//         }
+//
+//         let result = ready!(future.as_mut().unwrap().as_mut().poll(cx));
+//         *future = None;
+//         Poll::Ready(result.ok())
+//     }
+//
+//     fn size_hint(&self) -> (usize, Option<usize>) {
+//         if self.is_terminated() {
+//             (0, Some(0))
+//         } else {
+//             (0, None)
+//         }
+//     }
+// }
