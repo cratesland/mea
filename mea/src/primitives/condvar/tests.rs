@@ -17,8 +17,8 @@ use std::time::Duration;
 
 use tokio::task::JoinHandle;
 
-use crate::condvar::Condvar;
-use crate::mutex::Mutex;
+use crate::primitives::condvar::Condvar;
+use crate::primitives::mutex::Mutex;
 use crate::test_runtime;
 
 #[test]

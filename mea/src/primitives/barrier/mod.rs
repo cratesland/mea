@@ -73,8 +73,8 @@ use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
 
-use crate::internal::Mutex;
-use crate::internal::WaitSet;
+use crate::primitives::internal::Mutex;
+use crate::primitives::internal::WaitSet;
 
 #[cfg(test)]
 mod tests;

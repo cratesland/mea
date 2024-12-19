@@ -54,9 +54,9 @@ use std::task::Waker;
 
 use slab::Slab;
 
-use crate::internal::Mutex;
-use crate::mutex;
-use crate::mutex::MutexGuard;
+use crate::primitives::internal::Mutex;
+use crate::primitives::mutex;
+use crate::primitives::mutex::MutexGuard;
 
 #[cfg(test)]
 mod tests;

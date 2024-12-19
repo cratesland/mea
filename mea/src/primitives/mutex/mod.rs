@@ -59,7 +59,7 @@ use std::fmt;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
-use crate::internal;
+use crate::primitives::internal;
 
 /// An async mutex for protecting shared data.
 ///

@@ -58,7 +58,7 @@ use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
 
-use crate::internal::CountdownState;
+use crate::primitives::internal::CountdownState;
 
 #[cfg(test)]
 mod tests;

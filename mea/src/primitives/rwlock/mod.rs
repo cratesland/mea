@@ -69,7 +69,7 @@ use std::fmt;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
-use crate::internal::Semaphore;
+use crate::primitives::internal::Semaphore;
 
 /// A reader-writer lock that allows multiple readers or a single writer at a time.
 ///

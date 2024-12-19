@@ -64,7 +64,6 @@ struct CommandTest {
 impl CommandTest {
     fn run(self) {
         run_command(make_test_cmd(self.no_capture, true, &[]));
-        // run_command(make_test_cmd(self.no_capture, false, &[]));
     }
 }
 

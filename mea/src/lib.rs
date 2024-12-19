@@ -48,18 +48,19 @@
 //! [`Condvar`]: condvar::Condvar
 //! [`Latch`]: latch::Latch
 //! [`Mutex`]: mutex::Mutex
+//! [`RwLock`]: rwlock::RwLock
 //! [`Semaphore`]: semaphore::Semaphore
 //! [`WaitGroup`]: waitgroup::WaitGroup
 
-mod internal;
+#[cfg(feature = "combinators")]
+mod combinators;
+#[cfg(feature = "combinators")]
+pub use combinators::*;
 
-pub mod barrier;
-pub mod condvar;
-pub mod latch;
-pub mod mutex;
-pub mod rwlock;
-pub mod semaphore;
-pub mod waitgroup;
+#[cfg(feature = "primitives")]
+mod primitives;
+#[cfg(feature = "primitives")]
+pub use primitives::*;
 
 #[cfg(test)]
 fn test_runtime() -> &'static tokio::runtime::Runtime {
@@ -68,48 +69,4 @@ fn test_runtime() -> &'static tokio::runtime::Runtime {
     use tokio::runtime::Runtime;
     static RT: OnceLock<Runtime> = OnceLock::new();
     RT.get_or_init(|| Runtime::new().unwrap())
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::barrier::Barrier;
-    use crate::condvar::Condvar;
-    use crate::latch::Latch;
-    use crate::mutex::Mutex;
-    use crate::mutex::MutexGuard;
-    use crate::rwlock::RwLock;
-    use crate::rwlock::RwLockReadGuard;
-    use crate::rwlock::RwLockWriteGuard;
-    use crate::semaphore::Semaphore;
-    use crate::waitgroup::WaitGroup;
-
-    #[test]
-    fn assert_send_and_sync() {
-        fn do_assert_send_and_sync<T: Send + Sync>() {}
-        do_assert_send_and_sync::<Barrier>();
-        do_assert_send_and_sync::<Condvar>();
-        do_assert_send_and_sync::<Latch>();
-        do_assert_send_and_sync::<Semaphore>();
-        do_assert_send_and_sync::<WaitGroup>();
-        do_assert_send_and_sync::<Mutex<i64>>();
-        do_assert_send_and_sync::<MutexGuard<'_, i64>>();
-        do_assert_send_and_sync::<RwLock<i64>>();
-        do_assert_send_and_sync::<RwLockReadGuard<'_, i64>>();
-        do_assert_send_and_sync::<RwLockWriteGuard<'_, i64>>();
-    }
-
-    #[test]
-    fn assert_unpin() {
-        fn do_assert_unpin<T: Unpin>() {}
-        do_assert_unpin::<Barrier>();
-        do_assert_unpin::<Condvar>();
-        do_assert_unpin::<Latch>();
-        do_assert_unpin::<Semaphore>();
-        do_assert_unpin::<WaitGroup>();
-        do_assert_unpin::<Mutex<i64>>();
-        do_assert_unpin::<MutexGuard<'_, i64>>();
-        do_assert_unpin::<RwLock<i64>>();
-        do_assert_unpin::<RwLockReadGuard<'_, i64>>();
-        do_assert_unpin::<RwLockWriteGuard<'_, i64>>();
-    }
 }

@@ -80,7 +80,7 @@
 
 use std::sync::Arc;
 
-use crate::internal;
+use crate::primitives::internal;
 
 #[cfg(test)]
 mod tests;

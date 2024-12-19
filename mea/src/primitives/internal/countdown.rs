@@ -16,8 +16,8 @@ use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 use std::task::Context;
 
-use crate::internal::Mutex;
-use crate::internal::WaitSet;
+use crate::primitives::internal::Mutex;
+use crate::primitives::internal::WaitSet;
 
 #[derive(Debug)]
 pub(crate) struct CountdownState {

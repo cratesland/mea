@@ -248,6 +248,7 @@ dependencies = [
 name = "mea"
 version = "0.1.2"
 dependencies = [
+ "futures-core",
  "pollster",
  "slab",
  "tokio",

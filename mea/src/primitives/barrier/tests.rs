@@ -16,7 +16,7 @@ use tokio_test::assert_pending;
 use tokio_test::assert_ready;
 use tokio_test::task::spawn;
 
-use crate::barrier::Barrier;
+use crate::primitives::barrier::Barrier;
 
 #[test]
 fn zero_does_not_block() {

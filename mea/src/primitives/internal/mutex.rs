@@ -37,7 +37,7 @@ impl<T> Mutex<T> {
 mod tests {
     use std::sync::Arc;
 
-    use crate::internal::Mutex;
+    use super::*;
 
     #[test]
     fn test_poison_mutex() {

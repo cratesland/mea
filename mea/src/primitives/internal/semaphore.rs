@@ -23,8 +23,8 @@ use std::task::Waker;
 
 use slab::Slab;
 
-use crate::internal::Mutex;
-use crate::internal::WaitList;
+use crate::primitives::internal::Mutex;
+use crate::primitives::internal::WaitList;
 
 /// The internal semaphore that provides low-level async primitives.
 #[derive(Debug)]
