@@ -33,12 +33,14 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["combinators", "primitives"]
-combinators = ["dep:futures-core"]
+channel = ["primitives"]
+combinators = ["dep:futures-core", "dep:pin-project"]
+default = ["channel", "combinators", "primitives"]
 primitives = ["dep:slab"]
 
 [dependencies]
 futures-core = { version = "0.3.31", default-features = false, optional = true }
+pin-project = { version = "1.1.7", optional = true }
 slab = { version = "0.4.9", optional = true }
 
 [dev-dependencies]

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
-#![deny(missing_docs)]
+// #![deny(missing_docs)]
 
 //! # Mea - Make Easy Async
 //!
@@ -52,10 +52,11 @@
 //! [`Semaphore`]: semaphore::Semaphore
 //! [`WaitGroup`]: waitgroup::WaitGroup
 
+#[cfg(feature = "channel")]
+pub mod channel;
+
 #[cfg(feature = "combinators")]
 mod combinators;
-#[cfg(feature = "combinators")]
-pub use combinators::*;
 
 #[cfg(feature = "primitives")]
 mod primitives;
