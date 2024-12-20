@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! A multi-producer, multi-consumer channel.
+
 use std::collections::VecDeque;
 use std::fmt;
 use std::future::Future;
@@ -33,6 +35,7 @@ use crate::primitives::mutex::Mutex;
 #[cfg(test)]
 mod tests;
 
+/// Create a channel with no maximum capacity.
 pub fn unbounded<T>() -> (Sender<T>, Receiver<T>) {
     let shared = Arc::new(Shared::new(None));
     let sender = Sender {
@@ -42,6 +45,7 @@ pub fn unbounded<T>() -> (Sender<T>, Receiver<T>) {
     (sender, receiver)
 }
 
+/// Create a channel with a maximum capacity.
 pub fn bounded<T>(capacity: usize) -> (Sender<T>, Receiver<T>) {
     let shared = Arc::new(Shared::new(Some(capacity)));
     let sender = Sender {
@@ -103,9 +107,13 @@ impl<T> Channel<T> {
     }
 }
 
+/// An error that may be emitted when attempting to send a value into a channel on a sender when
+/// the channel is full or all receivers are dropped.
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum TrySendError<T> {
+    /// The channel the message is sent on has a finite capacity and was full when attempt to send.
     Full(T),
+    /// All channel receivers were dropped and so the message has nobody to receive it.
     Disconnected(T),
 }
 
@@ -129,6 +137,8 @@ impl<T> fmt::Display for TrySendError<T> {
 
 impl<T> std::error::Error for TrySendError<T> {}
 
+/// An error that may be emitted when attempting to send a value into a channel on a sender when
+/// all receivers are dropped.
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct SendError<T>(pub T);
 
@@ -146,6 +156,7 @@ impl<T> fmt::Display for SendError<T> {
 
 impl<T> std::error::Error for SendError<T> {}
 
+/// A transmitting end of a channel.
 pub struct Sender<T> {
     shared: Arc<Shared<T>>,
 }
@@ -168,11 +179,13 @@ impl<T> Drop for Sender<T> {
 }
 
 impl<T> Sender<T> {
+    /// Attempt to send a value into the channel. If the channel is bounded and full, or all
+    /// receivers have been dropped, [`TrySendError`] will be returned.
     pub fn try_send(&self, item: T) -> Result<(), TrySendError<T>> {
         pollster::block_on(self.do_try_send(item))
     }
 
-    pub async fn do_try_send(&self, item: T) -> Result<(), TrySendError<T>> {
+    async fn do_try_send(&self, item: T) -> Result<(), TrySendError<T>> {
         let mut channel = self.shared.channel.lock().await;
 
         if self.shared.is_disconnected() {
@@ -191,6 +204,9 @@ impl<T> Sender<T> {
         Ok(())
     }
 
+    /// Asynchronously send a value into the channel, returning [`SendError`] if all receivers have
+    /// been dropped. If the channel is bounded and is full, the returned future will yield to
+    /// the async runtime.
     pub async fn send(&self, item: T) -> Result<(), SendError<T>> {
         let mut channel = self.shared.channel.lock().await;
 
@@ -215,9 +231,15 @@ impl<T> Sender<T> {
     }
 }
 
+/// An error that may be emitted when attempting to fetch a value on a receiver when there are no
+/// messages in the channel. If there are no messages in the channel and all senders are dropped,
+/// then `TryRecvError::Disconnected` will be returned.
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum TryRecvError {
+    /// The channel was empty when attempt to receive.
     Empty,
+    /// All senders were dropped and no messages are waiting in the channel, so no further messages
+    /// can be received.
     Disconnected,
 }
 
@@ -232,6 +254,8 @@ impl fmt::Display for TryRecvError {
 
 impl std::error::Error for TryRecvError {}
 
+/// An error that may be emitted when attempting to wait for a value on a receiver when all senders
+/// are dropped and there are no more messages in the channel.
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub struct RecvError(());
 
@@ -243,6 +267,7 @@ impl fmt::Display for RecvError {
 
 impl std::error::Error for RecvError {}
 
+/// The receiving end of a channel.
 pub struct Receiver<T> {
     shared: Arc<Shared<T>>,
 }
@@ -265,6 +290,8 @@ impl<T> Drop for Receiver<T> {
 }
 
 impl<T> Receiver<T> {
+    /// Attempt to fetch an incoming value from the channel associated with this receiver,
+    /// returning [`TryRecvError`] if the channel is empty or if all senders have been dropped.
     pub fn try_recv(&self) -> Result<T, TryRecvError> {
         pollster::block_on(self.do_try_recv())
     }
@@ -284,6 +311,9 @@ impl<T> Receiver<T> {
         Err(TryRecvError::Empty)
     }
 
+    /// Asynchronously receive a value from the channel, returning [`RecvError`] if all senders have
+    /// been dropped. If the channel is empty, the returned future will yield to the async
+    /// runtime.
     pub async fn recv(&self) -> Result<T, RecvError> {
         let mut channel = self.shared.channel.lock().await;
         loop {
@@ -308,6 +338,8 @@ impl<T> Receiver<T> {
         }
     }
 
+    /// Convert this receiver into a stream that allows asynchronously receiving messages from the
+    /// channel.
     pub fn into_stream(self) -> impl Stream<Item = T> {
         RecvStream {
             future: self.recv_owned(),
@@ -321,6 +353,7 @@ struct StreamContext<T> {
     receiver: Receiver<T>,
 }
 
+/// A stream which allows asynchronously receiving messages.
 #[pin_project::pin_project]
 pub struct RecvStream<T, Fut> {
     #[pin]

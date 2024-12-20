@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
-// #![deny(missing_docs)]
+#![deny(missing_docs)]
 
 //! # Mea - Make Easy Async
 //!
