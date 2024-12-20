@@ -48,6 +48,7 @@
 //! [`Condvar`]: condvar::Condvar
 //! [`Latch`]: latch::Latch
 //! [`Mutex`]: mutex::Mutex
+//! [`RwLock`]: rwlock::RwLock
 //! [`Semaphore`]: semaphore::Semaphore
 //! [`WaitGroup`]: waitgroup::WaitGroup
 

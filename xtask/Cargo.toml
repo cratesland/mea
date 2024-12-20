@@ -23,6 +23,9 @@ readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[package.metadata.release]
+release = false
+
 [dependencies]
 clap = { version = "4.5.20", features = ["derive"] }
 which = { version = "7.0.0" }
