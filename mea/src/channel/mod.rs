@@ -210,10 +210,6 @@ impl<T> Sender<T> {
     pub async fn send(&self, item: T) -> Result<(), SendError<T>> {
         let mut channel = self.shared.channel.lock().await;
 
-        if self.shared.is_disconnected() {
-            return Err(SendError(item));
-        }
-
         while channel.is_full() && !self.shared.is_disconnected() {
             channel = self.shared.sender_wait.wait(channel).await;
         }

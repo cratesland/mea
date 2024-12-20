@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub(crate) mod internal;
+
 pub mod barrier;
 pub mod condvar;
-mod internal;
 pub mod latch;
 pub mod mutex;
 pub mod rwlock;

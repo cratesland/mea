@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::time::Duration;
+use std::time::Instant;
 
 use futures::StreamExt;
 
@@ -80,4 +81,24 @@ fn test_try_send_recv() {
     drop(rx);
 
     assert_eq!(tx.try_send(3), Err(TrySendError::Disconnected(3)));
+}
+
+#[test]
+fn test_pressure() {
+    let n = 1024 * 1024;
+    let (tx, rx) = unbounded();
+
+    test_runtime().block_on(async move {
+        let start = Instant::now();
+        tokio::spawn(async move {
+            for i in 0..n {
+                tx.send(i).await.unwrap();
+            }
+        });
+
+        for i in 0..n {
+            assert_eq!(rx.recv().await, Ok(i));
+        }
+        println!("Elapsed: {:?}", start.elapsed());
+    });
 }
