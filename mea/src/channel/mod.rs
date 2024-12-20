@@ -14,10 +14,15 @@
 
 use std::collections::VecDeque;
 use std::fmt;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::task::ready;
+use std::task::Context;
+use std::task::Poll;
 
 use futures_core::Stream;
 
@@ -69,6 +74,7 @@ impl<T> Shared<T> {
 
     fn disconnect(&self) {
         self.disconnected.store(true, Ordering::Relaxed);
+        self.receiver_wait.notify_all();
         self.sender_wait.notify_all();
     }
 
@@ -84,7 +90,7 @@ struct Channel<T> {
 
 impl<T> Channel<T> {
     fn is_full(&self) -> bool {
-        self.capacity.map_or(false, |cap| self.buffer.len() >= cap)
+        self.capacity.is_some_and(|cap| self.buffer.len() >= cap)
     }
 
     fn push_back(&mut self, item: T) {
@@ -207,11 +213,49 @@ impl<T> Receiver<T> {
         }
     }
 
+    async fn recv_owned(self) -> StreamContext<T> {
+        let result = self.recv().await;
+        StreamContext {
+            result,
+            receiver: self,
+        }
+    }
+
     pub fn into_stream(self) -> impl Stream<Item = T> {
-        async_stream::stream! {
-            while let Ok(item) = self.recv().await {
-                yield item;
+        RecvStream {
+            future: self.recv_owned(),
+            function: Receiver::recv_owned,
+        }
+    }
+}
+
+struct StreamContext<T> {
+    result: Result<T, RecvError>,
+    receiver: Receiver<T>,
+}
+
+#[pin_project::pin_project]
+pub struct RecvStream<T, Fut> {
+    #[pin]
+    future: Fut,
+    function: fn(Receiver<T>) -> Fut,
+}
+
+impl<T, Fut> Stream for RecvStream<T, Fut>
+where
+    Fut: Future<Output = StreamContext<T>>,
+{
+    type Item = T;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let mut this = self.project();
+        let StreamContext { result, receiver } = ready!(this.future.as_mut().poll(cx));
+        match result {
+            Ok(next) => {
+                this.future.set((this.function)(receiver));
+                Poll::Ready(Some(next))
             }
+            Err(RecvError(())) => Poll::Ready(None),
         }
     }
 }

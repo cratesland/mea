@@ -331,7 +331,6 @@ dependencies = [
 name = "mea"
 version = "0.1.2"
 dependencies = [
- "async-stream",
  "futures",
  "futures-core",
  "pin-project",
