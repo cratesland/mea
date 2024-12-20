@@ -15,6 +15,7 @@
 use std::collections::VecDeque;
 use std::fmt;
 use std::future::Future;
+use std::pin::pin;
 use std::pin::Pin;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicUsize;
@@ -103,6 +104,32 @@ impl<T> Channel<T> {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
+pub enum TrySendError<T> {
+    Full(T),
+    Disconnected(T),
+}
+
+impl<T> fmt::Debug for TrySendError<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            TrySendError::Full(..) => write!(f, "Full(..)"),
+            TrySendError::Disconnected(..) => write!(f, "Disconnected(..)"),
+        }
+    }
+}
+
+impl<T> fmt::Display for TrySendError<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TrySendError::Full(..) => write!(f, "sending on a closed channel"),
+            TrySendError::Disconnected(..) => write!(f, "sending on a closed channel"),
+        }
+    }
+}
+
+impl<T> std::error::Error for TrySendError<T> {}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct SendError<T>(pub T);
 
 impl<T> fmt::Debug for SendError<T> {
@@ -141,8 +168,32 @@ impl<T> Drop for Sender<T> {
 }
 
 impl<T> Sender<T> {
+    pub fn try_send(&self, item: T) -> Result<(), TrySendError<T>> {
+        pollster::block_on(self.do_try_send(item))
+    }
+
+    pub async fn do_try_send(&self, item: T) -> Result<(), TrySendError<T>> {
+        let mut channel = self.shared.channel.lock().await;
+
+        if self.shared.is_disconnected() {
+            return Err(TrySendError::Disconnected(item));
+        }
+
+        if channel.is_full() {
+            return Err(TrySendError::Full(item));
+        }
+
+        channel.push_back(item);
+        drop(channel);
+
+        self.shared.receiver_wait.notify_one();
+        self.shared.sender_wait.notify_one();
+        Ok(())
+    }
+
     pub async fn send(&self, item: T) -> Result<(), SendError<T>> {
         let mut channel = self.shared.channel.lock().await;
+
         if self.shared.is_disconnected() {
             return Err(SendError(item));
         }
@@ -163,6 +214,23 @@ impl<T> Sender<T> {
         Ok(())
     }
 }
+
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum TryRecvError {
+    Empty,
+    Disconnected,
+}
+
+impl fmt::Display for TryRecvError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            TryRecvError::Empty => write!(f, "receiving on an empty channel"),
+            TryRecvError::Disconnected => write!(f, "receiving on a closed channel"),
+        }
+    }
+}
+
+impl std::error::Error for TryRecvError {}
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub struct RecvError(());
@@ -197,6 +265,25 @@ impl<T> Drop for Receiver<T> {
 }
 
 impl<T> Receiver<T> {
+    pub fn try_recv(&self) -> Result<T, TryRecvError> {
+        pollster::block_on(self.do_try_recv())
+    }
+
+    async fn do_try_recv(&self) -> Result<T, TryRecvError> {
+        let mut channel = self.shared.channel.lock().await;
+
+        if let Some(item) = channel.pop_front() {
+            self.shared.sender_wait.notify_one();
+            return Ok(item);
+        }
+
+        if self.shared.is_disconnected() {
+            return Err(TryRecvError::Disconnected);
+        }
+
+        Err(TryRecvError::Empty)
+    }
+
     pub async fn recv(&self) -> Result<T, RecvError> {
         let mut channel = self.shared.channel.lock().await;
         loop {

@@ -35,18 +35,19 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 default = ["channel", "combinators", "primitives"]
 
-channel = ["primitives", "dep:futures-core", "dep:pin-project"]
+channel = ["primitives", "dep:futures-core", "dep:pin-project", "dep:pollster"]
 combinators = ["dep:futures-core", "dep:pin-project"]
 primitives = ["dep:slab"]
 
 [dependencies]
 futures-core = { version = "0.3.31", default-features = false, optional = true }
 pin-project = { version = "1.1.7", optional = true }
+pollster = { version = "0.4.0", optional = true }
 slab = { version = "0.4.9", optional = true }
 
 [dev-dependencies]
 futures = { version = "0.3.31" }
-pollster = { version = "0.4.0", features = ["macro"] }
+pollster = { version = "0.4.0" }
 tokio = { version = "1.42.0", features = ["full"] }
 tokio-test = { version = "0.4.4" }
 
