@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use futures::StreamExt;
+
 use crate::channel::unbounded;
 use crate::test_runtime;
 
@@ -28,15 +30,15 @@ fn test_unbounded() {
         }
         drop(tx);
 
-        // let sum = rx
-        //     .into_stream()
-        //     .fold(0, |acc, i| async move { acc + i })
-        //     .await;
+        let sum = rx
+            .into_stream()
+            .fold(0, |acc, i| async move { acc + i })
+            .await;
 
-        let mut sum = 0;
-        while let Ok(i) = rx.recv().await {
-            sum += i;
-        }
+        // let mut sum = 0;
+        // while let Ok(i) = rx.recv().await {
+        //     sum += i;
+        // }
         assert_eq!(sum, 4950);
     });
 }

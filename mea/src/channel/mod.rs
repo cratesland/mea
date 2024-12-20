@@ -13,13 +13,16 @@
 // limitations under the License.
 
 use std::collections::VecDeque;
-use std::error;
 use std::fmt;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use crate::primitives::internal::Mutex;
+
+use futures_core::Stream;
+
+use crate::primitives::condvar::Condvar;
+use crate::primitives::mutex::Mutex;
 
 #[cfg(test)]
 mod tests;
@@ -44,6 +47,8 @@ pub fn bounded<T>(capacity: usize) -> (Sender<T>, Receiver<T>) {
 
 struct Shared<T> {
     channel: Mutex<Channel<T>>,
+    sender_wait: Condvar,
+    receiver_wait: Condvar,
     disconnected: AtomicBool,
     sender_cnt: AtomicUsize,
     receiver_cnt: AtomicUsize,
@@ -54,6 +59,8 @@ impl<T> Shared<T> {
         let buffer = VecDeque::with_capacity(capacity.unwrap_or(0));
         Self {
             channel: Mutex::new(Channel { buffer, capacity }),
+            sender_wait: Condvar::new(),
+            receiver_wait: Condvar::new(),
             disconnected: AtomicBool::new(false),
             sender_cnt: AtomicUsize::new(1),
             receiver_cnt: AtomicUsize::new(1),
@@ -76,10 +83,6 @@ struct Channel<T> {
 }
 
 impl<T> Channel<T> {
-    fn is_empty(&self) -> bool {
-        self.buffer.is_empty()
-    }
-
     fn is_full(&self) -> bool {
         self.capacity.map_or(false, |cap| self.buffer.len() >= cap)
     }
@@ -164,7 +167,7 @@ impl fmt::Display for RecvError {
     }
 }
 
-impl error::Error for RecvError {}
+impl std::error::Error for RecvError {}
 
 pub struct Receiver<T> {
     shared: Arc<Shared<T>>,
@@ -201,6 +204,14 @@ impl<T> Receiver<T> {
             }
 
             channel = self.shared.receiver_wait.wait(channel).await;
+        }
+    }
+
+    pub fn into_stream(self) -> impl Stream<Item = T> {
+        async_stream::stream! {
+            while let Ok(item) = self.recv().await {
+                yield item;
+            }
         }
     }
 }
