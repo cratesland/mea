@@ -326,6 +326,7 @@ impl<T: ?Sized> DerefMut for MutexGuard<'_, T> {
 ///
 /// The lock is automatically released whenever the guard is dropped, at which point `lock` will
 /// succeed yet again.
+#[must_use = "if unused the Mutex will immediately unlock"]
 pub struct OwnedMutexGuard<T: ?Sized> {
     lock: Arc<Mutex<T>>,
 }
