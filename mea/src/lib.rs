@@ -52,7 +52,7 @@
 //! [`Semaphore`]: semaphore::Semaphore
 //! [`WaitGroup`]: waitgroup::WaitGroup
 
-mod internal;
+pub(crate) mod internal;
 
 pub mod barrier;
 pub mod condvar;

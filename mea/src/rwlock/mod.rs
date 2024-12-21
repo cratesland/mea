@@ -86,6 +86,29 @@ pub struct RwLock<T: ?Sized> {
 unsafe impl<T: ?Sized + Send> Send for RwLock<T> {}
 unsafe impl<T: ?Sized + Send + Sync> Sync for RwLock<T> {}
 
+impl<T> From<T> for RwLock<T> {
+    fn from(t: T) -> Self {
+        Self::new(t)
+    }
+}
+
+impl<T: ?Sized + Default> Default for RwLock<T> {
+    fn default() -> Self {
+        Self::new(T::default())
+    }
+}
+
+impl<T: ?Sized + fmt::Debug> fmt::Debug for RwLock<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("RwLock");
+        match self.try_read() {
+            Some(inner) => d.field("data", &&*inner),
+            None => d.field("data", &format_args!("<locked>")),
+        };
+        d.finish()
+    }
+}
+
 impl<T> RwLock<T> {
     /// Creates a new reader-writer lock in an unlocked state ready for use.
     ///
