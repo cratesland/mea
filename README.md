@@ -13,8 +13,8 @@
 [msrv-badge]: https://img.shields.io/badge/MSRV-1.80-green?logo=rust
 [license-badge]: https://img.shields.io/crates/l/mea
 [license-url]: LICENSE
-[actions-badge]: https://github.com/tisonkun/mea/actions/workflows/ci.yml/badge.svg
-[actions-url]: https://github.com/tisonkun/mea/actions/workflows/ci.yml
+[actions-badge]: https://github.com/cratesland/mea/actions/workflows/ci.yml/badge.svg
+[actions-url]: https://github.com/cratesland/mea/actions/workflows/ci.yml
 
 ## Overview
 
