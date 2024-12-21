@@ -79,7 +79,7 @@ impl<T> From<T> for Mutex<T> {
     }
 }
 
-impl<T: ?Sized + Default> Default for Mutex<T> {
+impl<T: Default> Default for Mutex<T> {
     fn default() -> Self {
         Self::new(T::default())
     }
@@ -330,7 +330,7 @@ pub struct OwnedMutexGuard<T: ?Sized> {
     lock: Arc<Mutex<T>>,
 }
 
-pub(crate) fn owned_guard_lock<'a, T: ?Sized>(guard: &OwnedMutexGuard<T>) -> Arc<Mutex<T>> {
+pub(crate) fn owned_guard_lock<T: ?Sized>(guard: &OwnedMutexGuard<T>) -> Arc<Mutex<T>> {
     guard.lock.clone()
 }
 

@@ -26,3 +26,6 @@ pub(crate) use waitlist::*;
 
 mod waitset;
 pub(crate) use waitset::*;
+
+mod wakerset;
+pub(crate) use wakerset::*;
