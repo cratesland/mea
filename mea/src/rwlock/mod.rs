@@ -143,6 +143,23 @@ impl<T> RwLock<T> {
         RwLock { max_readers, c, s }
     }
 
+    /// Consumes the lock, returning the underlying data.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mea::rwlock::RwLock;
+    ///
+    /// let lock = RwLock::new(1);
+    /// let n = lock.into_inner();
+    /// assert_eq!(n, 1);
+    /// ```
+    pub fn into_inner(self) -> T {
+        self.c.into_inner()
+    }
+}
+
+impl<T: ?Sized> RwLock<T> {
     /// Locks this `RwLock` with shared read access, causing the current task to yield until the
     /// lock has been acquired.
     ///
@@ -290,6 +307,24 @@ impl<T> RwLock<T> {
         } else {
             None
         }
+    }
+
+    /// Returns a mutable reference to the underlying data.
+    ///
+    /// Since this call borrows the `RwLock` mutably, no actual locking needs to take place: the
+    /// mutable borrow statically guarantees no locks exist.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mea::rwlock::RwLock;
+    ///
+    /// let mut lock = RwLock::new(1);
+    /// let n = lock.get_mut();
+    /// *n = 2;
+    /// ```
+    pub fn get_mut(&mut self) -> &mut T {
+        self.c.get_mut()
     }
 }
 

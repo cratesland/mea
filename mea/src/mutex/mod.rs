@@ -188,8 +188,8 @@ impl<T: ?Sized> Mutex<T> {
 
     /// Returns a mutable reference to the underlying data.
     ///
-    /// Since this call borrows the `Mutex` mutably, no actual locking needs to
-    /// take place -- the mutable borrow statically guarantees no locks exist.
+    /// Since this call borrows the `Mutex` mutably, no actual locking needs to take place: the
+    /// mutable borrow statically guarantees no locks exist.
     ///
     /// # Examples
     ///
