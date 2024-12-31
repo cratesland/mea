@@ -55,8 +55,24 @@ impl WaitSet {
                 *idx = Some(key);
             }
             Some(key) => {
-                if !self.waiters[key].will_wake(cx.waker()) {
-                    self.waiters[key] = cx.waker().clone();
+                if self.waiters.contains(key) {
+                    if !self.waiters[key].will_wake(cx.waker()) {
+                        self.waiters[key] = cx.waker().clone();
+                    }
+                } else {
+                    // DEFENSIVE NOTE:
+                    //
+                    // This is possible if latch/waitgroup is fired between the first and second
+                    // state check.
+                    //
+                    // In this case, it does not harm to re-register the waker. Because
+                    // the second state check will finish the future and the WaitSet gets
+                    // dropped.
+                    //
+                    // Barrier holds the lock during check and register, so the race condition
+                    // above won't happen.
+                    let key = self.waiters.insert(cx.waker().clone());
+                    *idx = Some(key);
                 }
             }
         }
