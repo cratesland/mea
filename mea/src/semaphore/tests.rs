@@ -123,3 +123,15 @@ fn no_panic_at_max_permits() {
     let s = Semaphore::new(u32::MAX - 1);
     s.release(1);
 }
+
+#[test]
+fn try_acquire_concurrently() {
+    let s = Semaphore::new(1);
+    let p1 = s.try_acquire(1).unwrap();
+    assert_eq!(s.available_permits(), 0);
+    let p2 = s.try_acquire(1);
+    assert!(p2.is_none());
+    assert_eq!(s.available_permits(), 0);
+    drop(p1);
+    assert_eq!(s.available_permits(), 1);
+}

@@ -196,9 +196,11 @@ impl Semaphore {
     ///
     /// [`forget`]: SemaphorePermit::forget
     pub fn try_acquire(&self, permits: u32) -> Option<SemaphorePermit<'_>> {
-        self.s
-            .try_acquire(permits)
-            .then_some(SemaphorePermit { sem: self, permits })
+        if self.s.try_acquire(permits) {
+            Some(SemaphorePermit { sem: self, permits })
+        } else {
+            None
+        }
     }
 
     /// Acquires `n` permits from the semaphore.
@@ -270,9 +272,11 @@ impl Semaphore {
     ///
     /// [`forget`]: SemaphorePermit::forget
     pub fn try_acquire_owned(self: Arc<Self>, permits: u32) -> Option<OwnedSemaphorePermit> {
-        self.s
-            .try_acquire(permits)
-            .then_some(OwnedSemaphorePermit { sem: self, permits })
+        if self.s.try_acquire(permits) {
+            Some(OwnedSemaphorePermit { sem: self, permits })
+        } else {
+            None
+        }
     }
 
     /// Acquires `n` permits from the semaphore.
