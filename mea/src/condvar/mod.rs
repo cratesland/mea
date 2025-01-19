@@ -50,9 +50,10 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
+use std::task::Waker;
 
 use crate::internal::Mutex;
-use crate::internal::WakerSet;
+use crate::internal::WaitList;
 use crate::mutex;
 use crate::mutex::MutexGuard;
 use crate::mutex::OwnedMutexGuard;
@@ -64,13 +65,18 @@ mod tests;
 ///
 /// See the [module level documentation](self) for more.
 pub struct Condvar {
-    wakers: Mutex<WakerSet>,
+    wakers: Mutex<WaitList<WaitNode>>,
 }
 
 impl fmt::Debug for Condvar {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Condvar").finish_non_exhaustive()
     }
+}
+
+#[derive(Debug)]
+struct WaitNode {
+    waker: Option<Waker>,
 }
 
 impl Default for Condvar {
@@ -91,20 +97,37 @@ impl Condvar {
     /// ```
     pub fn new() -> Condvar {
         Condvar {
-            wakers: Mutex::new(WakerSet::new()),
+            wakers: Mutex::new(WaitList::new()),
         }
     }
 
     /// Wakes up one blocked task on this condvar.
     pub fn notify_one(&self) {
         let mut wakers = self.wakers.lock();
-        wakers.notify_one();
+        if let Some(waker) = wakers.remove_first_waiter(|_| true) {
+            if let Some(waker) = waker.waker.take() {
+                waker.wake();
+            } else {
+                unreachable!("waker was removed from the list without a waker");
+            }
+        }
     }
 
     /// Wakes up all blocked tasks on this condvar.
     pub fn notify_all(&self) {
         let mut wakers = self.wakers.lock();
-        wakers.notify_all();
+        let mut waiters = vec![];
+        while let Some(waker) = wakers.remove_first_waiter(|_| true) {
+            if let Some(waker) = waker.waker.take() {
+                waiters.push(waker);
+            } else {
+                unreachable!("waker was removed from the list without a waker");
+            }
+        }
+        drop(wakers);
+        for waker in waiters {
+            waker.wake();
+        }
     }
 
     /// Yields the current task until this condition variable receives a notification.
@@ -242,7 +265,7 @@ struct AwaitNotify<'a, G> {
     /// This will be released the first time the future is polled,
     /// after registering the context to be notified.
     guard: Option<G>,
-    /// A key into the conditions variable's [`WakerSet`].
+    /// A key into the conditions variable's [`WaitList`].
     /// This is set to the index of the `Waker` for the context each time
     /// the future is polled and not completed.
     key: Option<usize>,
@@ -254,18 +277,39 @@ where
 {
     type Output = ();
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut wakers = self.cond.wakers.lock();
-        match self.guard.take() {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let Self { cond, guard, key } = self.get_mut();
+
+        let mut wakers = cond.wakers.lock();
+        match guard.take() {
             Some(..) => {
-                self.key = Some(wakers.insert(cx));
+                wakers.register_waiter(key, |node| match node {
+                    None => Some(WaitNode {
+                        waker: Some(cx.waker().clone()),
+                    }),
+                    Some(node) => unreachable!("unexpected node: {:?}", node),
+                });
                 // the guard is dropped when we return, which frees the lock
                 Poll::Pending
             }
             None => {
-                if let Some(key) = self.key {
-                    if wakers.remove_if_notified(key, cx) {
-                        self.key = None;
+                if let Some(idx) = key {
+                    let mut ready = false;
+                    wakers.with_mut(*idx, |node| match node.waker {
+                        Some(ref mut w) => {
+                            if !w.will_wake(cx.waker()) {
+                                w.clone_from(cx.waker());
+                            }
+                            false
+                        }
+                        None => {
+                            ready = true;
+                            true
+                        }
+                    });
+
+                    if ready {
+                        *key = None;
                         Poll::Ready(())
                     } else {
                         Poll::Pending
@@ -283,7 +327,8 @@ impl<G> Drop for AwaitNotify<'_, G> {
     fn drop(&mut self) {
         let mut wakers = self.cond.wakers.lock();
         if let Some(key) = self.key {
-            wakers.cancel(key);
+            wakers.remove_waiter(key, |_| true);
+            wakers.with_mut(key, |_| true); // drop
         }
     }
 }

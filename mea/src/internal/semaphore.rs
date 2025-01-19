@@ -138,6 +138,8 @@ impl Semaphore {
                     Some(waiter) => {
                         if let Some(waker) = waiter.waker.take() {
                             wakers.insert(waker);
+                        } else {
+                            unreachable!("waker was removed from the list without a waker");
                         }
                     }
                 }
