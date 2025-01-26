@@ -14,14 +14,12 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::atomic::AtomicU32;
+use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::MutexGuard;
 use std::task::Context;
 use std::task::Poll;
 use std::task::Waker;
-
-use slab::Slab;
 
 use crate::internal::Mutex;
 use crate::internal::WaitList;
@@ -30,33 +28,33 @@ use crate::internal::WaitList;
 #[derive(Debug)]
 pub(crate) struct Semaphore {
     /// The current number of available permits in the semaphore.
-    permits: AtomicU32,
+    permits: AtomicUsize,
     waiters: Mutex<WaitList<WaitNode>>,
 }
 
 #[derive(Debug)]
 struct WaitNode {
-    permits: u32,
+    permits: usize,
     waker: Option<Waker>,
 }
 
 impl Semaphore {
-    pub(crate) fn new(permits: u32) -> Self {
+    pub(crate) fn new(permits: usize) -> Self {
         Self {
-            permits: AtomicU32::new(permits),
+            permits: AtomicUsize::new(permits),
             waiters: Mutex::new(WaitList::new()),
         }
     }
 
     /// Returns the current number of available permits.
-    pub(crate) fn available_permits(&self) -> u32 {
+    pub(crate) fn available_permits(&self) -> usize {
         self.permits.load(Ordering::Acquire)
     }
 
     /// Tries to acquire `n` permits from the semaphore.
     ///
     /// Returns `true` if the permits were acquired, `false` otherwise.
-    pub(crate) fn try_acquire(&self, n: u32) -> bool {
+    pub(crate) fn try_acquire(&self, n: usize) -> bool {
         let mut current = self.permits.load(Ordering::Acquire);
         loop {
             if current < n {
@@ -77,7 +75,7 @@ impl Semaphore {
     /// Decrease a semaphore's permits by a maximum of `n`.
     ///
     /// Return the number of permits that were actually reduced.
-    pub(crate) fn forget(&self, n: u32) -> u32 {
+    pub(crate) fn forget(&self, n: usize) -> usize {
         if n == 0 {
             return 0;
         }
@@ -98,7 +96,7 @@ impl Semaphore {
     }
 
     /// Acquires `n` permits from the semaphore.
-    pub(crate) async fn acquire(&self, n: u32) {
+    pub(crate) async fn acquire(&self, n: usize) {
         let fut = Acquire {
             permits: n,
             index: None,
@@ -109,15 +107,19 @@ impl Semaphore {
     }
 
     /// Adds `n` new permits to the semaphore.
-    pub(crate) fn release(&self, n: u32) {
+    pub(crate) fn release(&self, n: usize) {
         if n != 0 {
             self.insert_permits_with_lock(n, self.waiters.lock());
         }
     }
 
-    fn insert_permits_with_lock(&self, mut rem: u32, waiters: MutexGuard<'_, WaitList<WaitNode>>) {
+    fn insert_permits_with_lock(
+        &self,
+        mut rem: usize,
+        waiters: MutexGuard<'_, WaitList<WaitNode>>,
+    ) {
         const NUM_WAKER: usize = 32;
-        let mut wakers = Slab::with_capacity(NUM_WAKER);
+        let mut wakers = Vec::with_capacity(NUM_WAKER);
 
         let mut lock = Some(waiters);
         while rem > 0 {
@@ -137,7 +139,7 @@ impl Semaphore {
                     None => break,
                     Some(waiter) => {
                         if let Some(waker) = waiter.waker.take() {
-                            wakers.insert(waker);
+                            wakers.push(waker);
                         } else {
                             unreachable!("waker was removed from the list without a waker");
                         }
@@ -156,7 +158,7 @@ impl Semaphore {
             }
 
             drop(waiters);
-            for w in wakers.drain() {
+            for w in wakers.drain(..) {
                 w.wake();
             }
         }
@@ -165,7 +167,7 @@ impl Semaphore {
 
 #[derive(Debug)]
 pub(crate) struct Acquire<'a> {
-    permits: u32,
+    permits: usize,
     index: Option<usize>,
     semaphore: &'a Semaphore,
     done: bool,
