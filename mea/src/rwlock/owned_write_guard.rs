@@ -103,7 +103,7 @@ impl<T: ?Sized> RwLock<T> {
 /// This structure is created by the [`RwLock::write`] method.
 #[must_use = "if unused the RwLock will immediately unlock"]
 pub struct OwnedRwLockWriteGuard<T: ?Sized> {
-    pub(super) permits_acquired: u32,
+    pub(super) permits_acquired: usize,
     pub(super) lock: Arc<RwLock<T>>,
 }
 

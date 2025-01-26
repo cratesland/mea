@@ -98,29 +98,29 @@ async fn stress_test() {
 #[test]
 fn add_max_amount_permits() {
     let s = Semaphore::new(0);
-    s.release(u32::MAX);
-    assert_eq!(s.available_permits(), u32::MAX);
+    s.release(usize::MAX);
+    assert_eq!(s.available_permits(), usize::MAX);
 }
 
 #[test]
 #[should_panic]
 fn add_more_than_max_amount_permits1() {
     let s = Semaphore::new(1);
-    s.release(u32::MAX);
+    s.release(usize::MAX);
 }
 
 #[test]
 #[should_panic]
 fn add_more_than_max_amount_permits2() {
-    let s = Semaphore::new(u32::MAX - 1);
+    let s = Semaphore::new(usize::MAX - 1);
     s.release(1);
     s.release(1);
 }
 
 #[test]
 fn no_panic_at_max_permits() {
-    let _ = Semaphore::new(u32::MAX);
-    let s = Semaphore::new(u32::MAX - 1);
+    let _ = Semaphore::new(usize::MAX);
+    let s = Semaphore::new(usize::MAX - 1);
     s.release(1);
 }
 

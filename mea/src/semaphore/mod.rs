@@ -103,7 +103,7 @@ impl Semaphore {
     ///
     /// let sem = Semaphore::new(5); // Creates a semaphore with 5 permits
     /// ```
-    pub fn new(permits: u32) -> Self {
+    pub fn new(permits: usize) -> Self {
         Self {
             s: internal::Semaphore::new(permits),
         }
@@ -122,7 +122,7 @@ impl Semaphore {
     /// let permit = sem.try_acquire(1).unwrap();
     /// assert_eq!(sem.available_permits(), 1);
     /// ```
-    pub fn available_permits(&self) -> u32 {
+    pub fn available_permits(&self) -> usize {
         self.s.available_permits()
     }
 
@@ -146,7 +146,7 @@ impl Semaphore {
     /// assert_eq!(sem.forget(3), 2); // Only removes remaining 2 permits
     /// assert_eq!(sem.available_permits(), 0);
     /// ```
-    pub fn forget(&self, n: u32) -> u32 {
+    pub fn forget(&self, n: usize) -> usize {
         self.s.forget(n)
     }
 
@@ -165,7 +165,7 @@ impl Semaphore {
     /// sem.release(2); // Adds 2 permits
     /// assert_eq!(sem.available_permits(), 2);
     /// ```
-    pub fn release(&self, permits: u32) {
+    pub fn release(&self, permits: usize) {
         self.s.release(permits);
     }
 
@@ -195,7 +195,7 @@ impl Semaphore {
     /// ```
     ///
     /// [`forget`]: SemaphorePermit::forget
-    pub fn try_acquire(&self, permits: u32) -> Option<SemaphorePermit<'_>> {
+    pub fn try_acquire(&self, permits: usize) -> Option<SemaphorePermit<'_>> {
         if self.s.try_acquire(permits) {
             Some(SemaphorePermit { sem: self, permits })
         } else {
@@ -238,7 +238,7 @@ impl Semaphore {
     /// handle.await.unwrap();
     /// # }
     /// ```
-    pub async fn acquire(&self, permits: u32) -> SemaphorePermit<'_> {
+    pub async fn acquire(&self, permits: usize) -> SemaphorePermit<'_> {
         self.s.acquire(permits).await;
         SemaphorePermit { sem: self, permits }
     }
@@ -271,7 +271,7 @@ impl Semaphore {
     /// ```
     ///
     /// [`forget`]: SemaphorePermit::forget
-    pub fn try_acquire_owned(self: Arc<Self>, permits: u32) -> Option<OwnedSemaphorePermit> {
+    pub fn try_acquire_owned(self: Arc<Self>, permits: usize) -> Option<OwnedSemaphorePermit> {
         if self.s.try_acquire(permits) {
             Some(OwnedSemaphorePermit { sem: self, permits })
         } else {
@@ -317,7 +317,7 @@ impl Semaphore {
     /// }
     /// # }
     /// ```
-    pub async fn acquire_owned(self: Arc<Self>, permits: u32) -> OwnedSemaphorePermit {
+    pub async fn acquire_owned(self: Arc<Self>, permits: usize) -> OwnedSemaphorePermit {
         self.s.acquire(permits).await;
         OwnedSemaphorePermit { sem: self, permits }
     }
@@ -336,7 +336,7 @@ impl Semaphore {
 #[derive(Debug)]
 pub struct SemaphorePermit<'a> {
     sem: &'a Semaphore,
-    permits: u32,
+    permits: usize,
 }
 
 impl SemaphorePermit<'_> {
@@ -378,7 +378,7 @@ impl SemaphorePermit<'_> {
     /// let permit = sem.try_acquire(3).unwrap();
     /// assert_eq!(permit.permits(), 3);
     /// ```
-    pub fn permits(&self) -> u32 {
+    pub fn permits(&self) -> usize {
         self.permits
     }
 }
@@ -398,7 +398,7 @@ impl Drop for SemaphorePermit<'_> {
 #[derive(Debug)]
 pub struct OwnedSemaphorePermit {
     sem: Arc<Semaphore>,
-    permits: u32,
+    permits: usize,
 }
 
 impl OwnedSemaphorePermit {
@@ -440,7 +440,7 @@ impl OwnedSemaphorePermit {
     /// let permit = sem.try_acquire(3).unwrap();
     /// assert_eq!(permit.permits(), 3);
     /// ```
-    pub fn permits(&self) -> u32 {
+    pub fn permits(&self) -> usize {
         self.permits
     }
 }
