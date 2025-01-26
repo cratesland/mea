@@ -21,8 +21,6 @@ use std::task::Context;
 use std::task::Poll;
 use std::task::Waker;
 
-use slab::Slab;
-
 use crate::internal::Mutex;
 use crate::internal::WaitList;
 
@@ -117,7 +115,7 @@ impl Semaphore {
 
     fn insert_permits_with_lock(&self, mut rem: u32, waiters: MutexGuard<'_, WaitList<WaitNode>>) {
         const NUM_WAKER: usize = 32;
-        let mut wakers = Slab::with_capacity(NUM_WAKER);
+        let mut wakers = Vec::with_capacity(NUM_WAKER);
 
         let mut lock = Some(waiters);
         while rem > 0 {
@@ -137,7 +135,7 @@ impl Semaphore {
                     None => break,
                     Some(waiter) => {
                         if let Some(waker) = waiter.waker.take() {
-                            wakers.insert(waker);
+                            wakers.push(waker);
                         } else {
                             unreachable!("waker was removed from the list without a waker");
                         }
@@ -156,7 +154,7 @@ impl Semaphore {
             }
 
             drop(waiters);
-            for w in wakers.drain() {
+            for w in wakers {
                 w.wake();
             }
         }
