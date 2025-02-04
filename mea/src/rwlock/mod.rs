@@ -62,6 +62,8 @@
 //! ```
 //!
 //! [`Mutex`]: crate::mutex::Mutex
+//! [`Deref`]: std::ops::Deref
+//! [`DerefMut`]: std::ops::DerefMut
 //! [write-preferring]: https://en.wikipedia.org/wiki/Readers%E2%80%93writer_lock#Priority_policies
 
 use std::cell::UnsafeCell;
