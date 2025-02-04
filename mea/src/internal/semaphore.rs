@@ -113,6 +113,31 @@ impl Semaphore {
         }
     }
 
+    /// Adds many permits until there is no waiter.
+    pub(crate) fn release_all(&self) {
+        let mut waiters = self.waiters.lock();
+        let mut wakers = Vec::new();
+        loop {
+            match waiters.remove_first_waiter(|node| {
+                node.permits = 0;
+                true
+            }) {
+                None => break,
+                Some(waiter) => {
+                    if let Some(waker) = waiter.waker.take() {
+                        wakers.push(waker);
+                    } else {
+                        unreachable!("waker was removed from the list without a waker");
+                    }
+                }
+            }
+        }
+        drop(waiters);
+        for w in wakers.drain(..) {
+            w.wake();
+        }
+    }
+
     fn insert_permits_with_lock(
         &self,
         mut rem: usize,

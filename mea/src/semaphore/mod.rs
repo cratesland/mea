@@ -169,6 +169,15 @@ impl Semaphore {
         self.s.release(permits);
     }
 
+    /// Adds many permits until all acquires are unblocked.
+    ///
+    /// This method is designed to work with the "acquire and forget" methods, where
+    /// acquires and releases are managed separately, rather than coupled with the drop
+    /// of [`SemaphorePermit`] or [`OwnedSemaphorePermit`].
+    pub fn release_all(&self) {
+        self.s.release_all();
+    }
+
     /// Attempts to acquire `n` permits from the semaphore without blocking.
     ///
     /// If the permits are successfully acquired, a [`SemaphorePermit`] is returned.
@@ -201,6 +210,14 @@ impl Semaphore {
         } else {
             None
         }
+    }
+
+    /// Attempts to acquire `n` permits from the semaphore without blocking.
+    ///
+    /// This method performs as a combinator of [`Semaphore::try_acquire`] and
+    /// [`Semaphore::forget`].
+    pub fn try_acquire_and_forget(&self, permits: usize) -> bool {
+        self.s.try_acquire(permits)
     }
 
     /// Acquires `n` permits from the semaphore.
@@ -243,6 +260,14 @@ impl Semaphore {
         SemaphorePermit { sem: self, permits }
     }
 
+    /// Acquires `n` permits from the semaphore.
+    ///
+    /// This method performs as a combinator of [`Semaphore::acquire`] and
+    /// [`Semaphore::forget`].
+    pub async fn acquire_and_forget(&self, permits: usize) {
+        self.s.acquire(permits).await;
+    }
+
     /// Attempts to acquire `n` permits from the semaphore without blocking.
     ///
     /// The semaphore must be wrapped in an [`Arc`] to call this method.
@@ -277,6 +302,16 @@ impl Semaphore {
         } else {
             None
         }
+    }
+
+    /// Attempts to acquire `n` permits from the semaphore without blocking.
+    ///
+    /// The semaphore must be wrapped in an [`Arc`] to call this method.
+    ///
+    /// This method performs as a combinator of [`Semaphore::try_acquire_owned`] and
+    /// [`Semaphore::forget`].
+    pub fn try_acquire_owned_and_forget(self: Arc<Self>, permits: usize) -> bool {
+        self.s.try_acquire(permits)
     }
 
     /// Acquires `n` permits from the semaphore.
@@ -320,6 +355,16 @@ impl Semaphore {
     pub async fn acquire_owned(self: Arc<Self>, permits: usize) -> OwnedSemaphorePermit {
         self.s.acquire(permits).await;
         OwnedSemaphorePermit { sem: self, permits }
+    }
+
+    /// Acquires `n` permits from the semaphore.
+    ///
+    /// The semaphore must be wrapped in an [`Arc`] to call this method.
+    ///
+    /// This method performs as a combinator of [`Semaphore::acquire_owned`] and
+    /// [`Semaphore::forget`].
+    pub async fn acquire_owned_and_forget(self: Arc<Self>, permits: usize) {
+        self.s.acquire(permits).await;
     }
 }
 
