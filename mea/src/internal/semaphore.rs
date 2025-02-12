@@ -72,7 +72,7 @@ impl Semaphore {
         }
     }
 
-    /// Decrease a semaphore's permits by a maximum of `n`.
+    /// Decrease the semaphore's permits by a maximum of `n`.
     ///
     /// Return the number of permits that were actually reduced.
     pub(crate) fn forget(&self, n: usize) -> usize {
@@ -93,6 +93,14 @@ impl Semaphore {
                 Err(actual) => current = actual,
             }
         }
+    }
+
+    /// Decrease the semaphore's permits by `n`.
+    ///
+    /// If the semaphore has not enough permits, enqueue front an empty waiter to consume the
+    /// permits.
+    pub(crate) fn forget_exact(&self, n: usize) {
+        acquired_or_enqueue(self, n, &mut None, None, false);
     }
 
     /// Acquires `n` permits from the semaphore.
@@ -326,6 +334,12 @@ fn acquired_or_enqueue(
             })
         });
     } else {
+        waiters.register_waiter_to_head(idx, || {
+            Some(WaitNode {
+                permits: needed - acquired,
+                waker: waker.cloned(),
+            })
+        });
     }
     false
 }

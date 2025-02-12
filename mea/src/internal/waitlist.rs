@@ -49,7 +49,7 @@ impl<T> WaitList<T> {
     /// # Panic
     ///
     /// Panics if `idx` is `Some`.
-    pub(crate) fn registry_waiter_to_head(
+    pub(crate) fn register_waiter_to_head(
         &mut self,
         idx: &mut Option<usize>,
         f: impl FnOnce() -> Option<T>,
