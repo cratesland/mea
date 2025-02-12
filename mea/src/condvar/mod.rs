@@ -97,7 +97,7 @@ impl Condvar {
 
     /// Wakes up all blocked tasks on this condvar.
     pub fn notify_all(&self) {
-        self.s.release_all();
+        self.s.notify_all();
     }
 
     /// Yields the current task until this condition variable receives a notification.

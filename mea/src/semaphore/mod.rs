@@ -169,15 +169,6 @@ impl Semaphore {
         self.s.release(permits);
     }
 
-    /// Adds many permits until all acquires are unblocked.
-    ///
-    /// This method is designed to work with the "acquire and forget" methods, where
-    /// acquires and releases are managed separately, rather than coupled with the drop
-    /// of [`SemaphorePermit`] or [`OwnedSemaphorePermit`].
-    pub fn release_all(&self) {
-        self.s.release_all();
-    }
-
     /// Attempts to acquire `n` permits from the semaphore without blocking.
     ///
     /// If the permits are successfully acquired, a [`SemaphorePermit`] is returned.
