@@ -113,8 +113,8 @@ impl Semaphore {
         }
     }
 
-    /// Adds many permits until there is no waiter.
-    pub(crate) fn release_all(&self) {
+    /// Adds as many permits until there is no waiter.
+    pub(crate) fn notify_all(&self) {
         let mut waiters = self.waiters.lock();
         let mut wakers = Vec::new();
         loop {
