@@ -323,12 +323,11 @@ fn acquired_or_enqueue(
     };
 
     if enqueue_last {
-        waiters.register_waiter(idx, |node| match node {
-            None => Some(WaitNode {
+        waiters.register_waiter_to_tail(idx, || {
+            Some(WaitNode {
                 permits: needed - acquired,
                 waker: waker.cloned(),
-            }),
-            Some(node) => unreachable!("unexpected node: {:?}", node),
+            })
         });
     } else {
     }
