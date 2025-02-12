@@ -126,8 +126,6 @@ impl Semaphore {
                 Some(waiter) => {
                     if let Some(waker) = waiter.waker.take() {
                         wakers.push(waker);
-                    } else {
-                        unreachable!("waker was removed from the list without a waker");
                     }
                 }
             }
@@ -165,8 +163,6 @@ impl Semaphore {
                     Some(waiter) => {
                         if let Some(waker) = waiter.waker.take() {
                             wakers.push(waker);
-                        } else {
-                            unreachable!("waker was removed from the list without a waker");
                         }
                     }
                 }
