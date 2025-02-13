@@ -72,7 +72,7 @@ impl Semaphore {
         }
     }
 
-    /// Decrease a semaphore's permits by a maximum of `n`.
+    /// Decrease the semaphore's permits by a maximum of `n`.
     ///
     /// Return the number of permits that were actually reduced.
     pub(crate) fn forget(&self, n: usize) -> usize {
@@ -93,6 +93,14 @@ impl Semaphore {
                 Err(actual) => current = actual,
             }
         }
+    }
+
+    /// Decrease the semaphore's permits by `n`.
+    ///
+    /// If the semaphore has not enough permits, enqueue front an empty waiter to consume the
+    /// permits.
+    pub(crate) fn forget_exact(&self, n: usize) {
+        acquired_or_enqueue(self, n, &mut None, None, false);
     }
 
     /// Acquires `n` permits from the semaphore.
@@ -126,8 +134,6 @@ impl Semaphore {
                 Some(waiter) => {
                     if let Some(waker) = waiter.waker.take() {
                         wakers.push(waker);
-                    } else {
-                        unreachable!("waker was removed from the list without a waker");
                     }
                 }
             }
@@ -165,8 +171,6 @@ impl Semaphore {
                     Some(waiter) => {
                         if let Some(waker) = waiter.waker.take() {
                             wakers.push(waker);
-                        } else {
-                            unreachable!("waker was removed from the list without a waker");
                         }
                     }
                 }
@@ -261,60 +265,81 @@ impl Future for Acquire<'_> {
                 // not yet enqueued
                 let needed = *permits;
 
-                let mut acquired = 0;
-                let mut current = semaphore.permits.load(Ordering::Acquire);
-                let mut lock = None;
-
-                let mut waiters = loop {
-                    let mut remaining = 0;
-                    let total = current.checked_add(acquired).expect("permits overflow");
-                    let (next, acq) = if total >= needed {
-                        let next = current - (needed - acquired);
-                        (next, needed - acquired)
-                    } else {
-                        remaining = (needed - acquired) - current;
-                        (0, current)
-                    };
-
-                    if remaining > 0 && lock.is_none() {
-                        // No permits were immediately available, so this permit will
-                        // (probably) need to wait. We'll need to acquire a lock on the
-                        // wait queue before continuing. We need to do this _before_ the
-                        // CAS that sets the new value of the semaphore's `permits`
-                        // counter. Otherwise, if we subtract the permits and then
-                        // acquire the lock, we might miss additional permits being
-                        // added while waiting for the lock.
-                        lock = Some(semaphore.waiters.lock());
-                    }
-
-                    match semaphore.permits.compare_exchange(
-                        current,
-                        next,
-                        Ordering::AcqRel,
-                        Ordering::Acquire,
-                    ) {
-                        Ok(_) => {
-                            acquired += acq;
-                            if remaining == 0 {
-                                *done = true;
-                                return Poll::Ready(());
-                            }
-                            break lock.expect("lock not acquired");
-                        }
-                        Err(actual) => current = actual,
-                    }
-                };
-
-                waiters.register_waiter(index, |node| match node {
-                    None => Some(WaitNode {
-                        permits: needed - acquired,
-                        waker: Some(cx.waker().clone()),
-                    }),
-                    Some(node) => unreachable!("unexpected node: {:?}", node),
-                });
+                if acquired_or_enqueue(semaphore, needed, index, Some(cx.waker()), true) {
+                    *done = true;
+                    return Poll::Ready(());
+                }
             }
         };
 
         Poll::Pending
     }
+}
+
+/// Returns `true` if successfully acquired the semaphore; `false` otherwise.
+fn acquired_or_enqueue(
+    semaphore: &Semaphore,
+    needed: usize,
+    idx: &mut Option<usize>,
+    waker: Option<&Waker>,
+    enqueue_last: bool,
+) -> bool {
+    let mut acquired = 0;
+    let mut current = semaphore.permits.load(Ordering::Acquire);
+    let mut lock = None;
+
+    let mut waiters = loop {
+        let mut remaining = 0;
+        let total = current.checked_add(acquired).expect("permits overflow");
+        let (next, acq) = if total >= needed {
+            let next = current - (needed - acquired);
+            (next, needed - acquired)
+        } else {
+            remaining = (needed - acquired) - current;
+            (0, current)
+        };
+
+        if remaining > 0 && lock.is_none() {
+            // No permits were immediately available, so this permit will
+            // (probably) need to wait. We'll need to acquire a lock on the
+            // wait queue before continuing. We need to do this _before_ the
+            // CAS that sets the new value of the semaphore's `permits`
+            // counter. Otherwise, if we subtract the permits and then
+            // acquire the lock, we might miss additional permits being
+            // added while waiting for the lock.
+            lock = Some(semaphore.waiters.lock());
+        }
+
+        match semaphore
+            .permits
+            .compare_exchange(current, next, Ordering::AcqRel, Ordering::Acquire)
+        {
+            Ok(_) => {
+                acquired += acq;
+                if remaining == 0 {
+                    return true;
+                }
+                // SAFETY: remaining > 0, lock must be Some
+                break lock.unwrap();
+            }
+            Err(actual) => current = actual,
+        }
+    };
+
+    if enqueue_last {
+        waiters.register_waiter_to_tail(idx, || {
+            Some(WaitNode {
+                permits: needed - acquired,
+                waker: waker.cloned(),
+            })
+        });
+    } else {
+        waiters.register_waiter_to_head(idx, || {
+            Some(WaitNode {
+                permits: needed - acquired,
+                waker: waker.cloned(),
+            })
+        });
+    }
+    false
 }

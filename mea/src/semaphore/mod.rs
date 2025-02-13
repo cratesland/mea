@@ -150,6 +150,33 @@ impl Semaphore {
         self.s.forget(n)
     }
 
+    /// Reduces the semaphore's permits by exactly `n`.
+    ///
+    /// If the semaphore has not enough permits, this would enqueue front an empty waiter to
+    /// consume the permits, which ensures the permits are reduced by exactly `n`.
+    ///
+    /// This is useful when you want to permanently remove permits from the semaphore.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mea::semaphore::Semaphore;
+    ///
+    /// let sem = Semaphore::new(5);
+    /// sem.forget_exact(3); // Removes 3 permits
+    /// assert_eq!(sem.available_permits(), 2);
+    ///
+    /// // Trying to forget more permits than available
+    /// sem.forget_exact(3); // Only removes remaining 2 permits
+    /// assert_eq!(sem.available_permits(), 0);
+    ///
+    /// sem.release(5); // Adds 5 permits
+    /// assert_eq!(sem.available_permits(), 4); // Only 4 permits are available
+    /// ```
+    pub fn forget_exact(&self, n: usize) {
+        self.s.forget_exact(n);
+    }
+
     /// Adds `n` new permits to the semaphore.
     ///
     /// # Panics

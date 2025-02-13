@@ -44,33 +44,54 @@ impl<T> WaitList<T> {
         Self { guard, nodes }
     }
 
-    /// Registers a waiter to the tail of the wait list.
-    pub(crate) fn register_waiter(
+    /// Registers a waiter to the head of the wait list.
+    ///
+    /// # Panic
+    ///
+    /// Panics if `idx` is `Some`.
+    pub(crate) fn register_waiter_to_head(
         &mut self,
         idx: &mut Option<usize>,
-        f: impl FnOnce(Option<&T>) -> Option<T>,
+        f: impl FnOnce() -> Option<T>,
     ) {
-        match *idx {
-            None => {
-                let stat = f(None);
-                let prev_tail = self.nodes[self.guard].prev;
-                let new_node = Node {
-                    prev: prev_tail,
-                    next: self.guard,
-                    stat,
-                };
-                let new_key = self.nodes.insert(new_node);
-                self.nodes[self.guard].prev = new_key;
-                self.nodes[prev_tail].next = new_key;
-                *idx = Some(new_key);
-            }
-            Some(key) => {
-                debug_assert_ne!(key, self.guard);
-                if let Some(stat) = f(self.nodes[key].stat.as_ref()) {
-                    self.nodes[key].stat = Some(stat);
-                }
-            }
-        }
+        assert!(idx.is_none());
+
+        let stat = f();
+        let prev_head = self.nodes[self.guard].next;
+        let new_node = Node {
+            prev: self.guard,
+            next: prev_head,
+            stat,
+        };
+        let new_key = self.nodes.insert(new_node);
+        self.nodes[self.guard].next = new_key;
+        self.nodes[prev_head].prev = new_key;
+        *idx = Some(new_key);
+    }
+
+    /// Registers a waiter to the tail of the wait list.
+    ///
+    /// # Panic
+    ///
+    /// Panics if `idx` is `Some`.
+    pub(crate) fn register_waiter_to_tail(
+        &mut self,
+        idx: &mut Option<usize>,
+        f: impl FnOnce() -> Option<T>,
+    ) {
+        assert!(idx.is_none());
+
+        let stat = f();
+        let prev_tail = self.nodes[self.guard].prev;
+        let new_node = Node {
+            prev: prev_tail,
+            next: self.guard,
+            stat,
+        };
+        let new_key = self.nodes.insert(new_node);
+        self.nodes[self.guard].prev = new_key;
+        self.nodes[prev_tail].next = new_key;
+        *idx = Some(new_key);
     }
 
     /// Removes a previously registered waker from the wait list.
@@ -79,7 +100,8 @@ impl<T> WaitList<T> {
         idx: usize,
         f: impl FnOnce(&mut T) -> bool,
     ) -> Option<&mut T> {
-        debug_assert_ne!(idx, self.guard);
+        assert_ne!(idx, self.guard);
+
         // SAFETY: `idx` is a valid key + non-guard node always has `Some(stat)`
         fn retrieve_stat<T>(node: &mut Node<T>) -> &mut T {
             node.stat.as_mut().unwrap()

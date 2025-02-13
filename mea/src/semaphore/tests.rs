@@ -16,6 +16,7 @@ use std::sync::Arc;
 use std::vec::Vec;
 
 use super::*;
+use crate::latch::Latch;
 
 #[test]
 fn no_permits() {
@@ -134,4 +135,29 @@ fn try_acquire_concurrently() {
     assert_eq!(s.available_permits(), 0);
     drop(p1);
     assert_eq!(s.available_permits(), 1);
+}
+
+#[tokio::test]
+async fn acquire_then_forget_exact() {
+    let s = Arc::new(Semaphore::new(5));
+    s.forget_exact(3);
+    assert_eq!(s.available_permits(), 2);
+
+    let acquired = Arc::new(Latch::new(1));
+
+    let acquired_clone = acquired.clone();
+    let s_clone = s.clone();
+    tokio::spawn(async move {
+        let _p = s_clone.acquire(3).await;
+        acquired_clone.count_down();
+    });
+    assert!(acquired.try_wait().is_err());
+
+    s.forget_exact(2);
+    s.release(2);
+    assert!(acquired.try_wait().is_err());
+
+    s.release(1);
+    acquired.wait().await;
+    assert_eq!(s.available_permits(), 3);
 }
