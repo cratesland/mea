@@ -12,7 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::future::Future;
+use std::pin::pin;
 use std::sync::Arc;
+use std::task::Context;
+use std::task::Waker;
 use std::vec::Vec;
 
 use super::*;
@@ -133,6 +137,21 @@ fn try_acquire_concurrently() {
     let p2 = s.try_acquire(1);
     assert!(p2.is_none());
     assert_eq!(s.available_permits(), 0);
+    drop(p1);
+    assert_eq!(s.available_permits(), 1);
+}
+
+#[test]
+fn acquire_then_drop() {
+    let mut context = Context::from_waker(Waker::noop());
+
+    let s = Semaphore::new(1);
+    let p1 = s.try_acquire(1).unwrap();
+    {
+        let p2 = s.acquire(1);
+        let poll = pin!(p2).poll(&mut context);
+        assert!(poll.is_pending());
+    }
     drop(p1);
     assert_eq!(s.available_permits(), 1);
 }
