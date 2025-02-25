@@ -16,6 +16,8 @@ use std::future::Future;
 use std::pin::pin;
 use std::sync::Arc;
 use std::task::Context;
+use std::task::RawWaker;
+use std::task::RawWakerVTable;
 use std::task::Waker;
 use std::vec::Vec;
 
@@ -143,7 +145,8 @@ fn try_acquire_concurrently() {
 
 #[test]
 fn acquire_then_drop() {
-    let mut context = Context::from_waker(Waker::noop());
+    let waker = noop_waker();
+    let mut context = Context::from_waker(&waker);
 
     let s = Semaphore::new(1);
     let p1 = s.try_acquire(1).unwrap();
@@ -179,4 +182,22 @@ async fn acquire_then_forget_exact() {
     s.release(1);
     acquired.wait().await;
     assert_eq!(s.available_permits(), 3);
+}
+
+fn noop_waker() -> Waker {
+    const NOOP: RawWaker = {
+        const VTABLE: RawWakerVTable = RawWakerVTable::new(
+            // Cloning just returns a new no-op raw waker
+            |_| NOOP,
+            // `wake` does nothing
+            |_| {},
+            // `wake_by_ref` does nothing
+            |_| {},
+            // Dropping does nothing as we don't allocate anything
+            |_| {},
+        );
+        RawWaker::new(std::ptr::null(), &VTABLE)
+    };
+
+    unsafe { Waker::from_raw(NOOP) }
 }
