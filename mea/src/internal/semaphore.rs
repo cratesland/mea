@@ -208,7 +208,7 @@ impl Drop for Acquire<'_> {
             let mut waiters = self.semaphore.waiters.lock();
             let mut acquired = 0;
             waiters.remove_waiter(index, |node| {
-                acquired = node.permits;
+                acquired = self.permits - node.permits;
                 node.permits = 0;
                 true
             });
