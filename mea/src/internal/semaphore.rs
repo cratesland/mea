@@ -181,7 +181,7 @@ impl Semaphore {
                 let prev = self.permits.fetch_add(permits, Ordering::Release);
                 assert!(
                     prev.checked_add(permits).is_some(),
-                    "number of added permits ({permits}) would overflow u32::MAX (prev: {prev})"
+                    "number of added permits ({permits}) would overflow usize::MAX (prev: {prev})"
                 );
                 rem = 0;
             }
