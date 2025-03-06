@@ -112,6 +112,8 @@ impl<T> WaitList<T> {
             let next = self.nodes[idx].next;
             self.nodes[prev].next = next;
             self.nodes[next].prev = prev;
+            self.nodes[idx].prev = idx;
+            self.nodes[idx].next = idx;
             Some(retrieve_stat(&mut self.nodes[idx]))
         } else {
             None
