@@ -159,6 +159,27 @@ fn acquire_then_drop() {
     assert_eq!(s.available_permits(), 1);
 }
 
+#[test]
+fn wake_then_drop() {
+    let waker = noop_waker();
+    let mut context = Context::from_waker(&waker);
+
+    let s = Semaphore::new(2);
+    let p1 = s.try_acquire(2).unwrap();
+    {
+        let p2 = s.acquire(1);
+        let p2 = pin!(p2);
+        assert!(p2.poll(&mut context).is_pending());
+        {
+            let p3 = s.acquire(1);
+            let p3 = pin!(p3);
+            assert!(p3.poll(&mut context).is_pending());
+            drop(p1);
+        }
+    }
+    assert_eq!(s.available_permits(), 2);
+}
+
 #[tokio::test]
 async fn acquire_then_forget_exact() {
     let s = Arc::new(Semaphore::new(5));
