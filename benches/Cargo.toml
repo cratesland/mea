@@ -12,29 +12,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-[workspace]
-members = ["benches", "mea", "xtask"]
-resolver = "2"
+[package]
+name = "benches"
+publish = false
 
-[workspace.package]
-edition = "2021"
-homepage = "https://github.com/cratesland/mea"
-license = "Apache-2.0"
-readme = "README.md"
-repository = "https://github.com/cratesland/mea"
-rust-version = "1.80.0"
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
-[workspace.dependencies]
-mea = { path = "mea" }
+[package.metadata.release]
+release = false
 
-[workspace.lints.rust]
-unknown_lints = "deny"
+[features]
+default = []
+parking_lot = ["mea/parking_lot"]
 
-[workspace.lints.clippy]
-dbg_macro = "deny"
+[dependencies]
+mea = { workspace = true }
 
-[workspace.metadata.release]
-pre-release-commit-message = "chore: release v{{version}}"
-shared-version = true
-sign-tag = true
-tag-name = "v{{version}}"
+[dev-dependencies]
+divan = { version = "0.1.17" }
+tokio = { version = "1.44.0", features = ["full"] }
+
+[lints]
+workspace = true
+
+[[bench]]
+harness = false
+name = "semaphore"
+path = "semaphore.rs"

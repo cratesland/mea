@@ -19,21 +19,22 @@ pub(crate) use parking_lot::*;
 mod parking_lot {
     use std::fmt;
     use std::marker::PhantomData;
-    use std::ops::{Deref, DerefMut};
+    use std::ops::Deref;
+    use std::ops::DerefMut;
 
     pub(crate) struct MutexGuard<'a, T: ?Sized>(
         PhantomData<std::sync::MutexGuard<'a, T>>,
         parking_lot::MutexGuard<'a, T>,
     );
 
-    impl<'a, T: ?Sized> Deref for MutexGuard<'a, T> {
+    impl<T: ?Sized> Deref for MutexGuard<'_, T> {
         type Target = T;
         fn deref(&self) -> &T {
             self.1.deref()
         }
     }
 
-    impl<'a, T: ?Sized> DerefMut for MutexGuard<'a, T> {
+    impl<T: ?Sized> DerefMut for MutexGuard<'_, T> {
         fn deref_mut(&mut self) -> &mut T {
             self.1.deref_mut()
         }
