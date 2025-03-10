@@ -16,12 +16,12 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
-use std::sync::MutexGuard;
 use std::task::Context;
 use std::task::Poll;
 use std::task::Waker;
 
 use crate::internal::Mutex;
+use crate::internal::MutexGuard;
 use crate::internal::WaitList;
 
 /// The internal semaphore that provides low-level async primitives.

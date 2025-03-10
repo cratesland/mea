@@ -32,8 +32,14 @@ rust-version.workspace = true
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[features]
+default = []
+parking_lot = ["dep:parking_lot"]
+
 [dependencies]
 slab = { version = "0.4.9" }
+
+parking_lot = { version = "0.12.3", optional = true }
 
 [dev-dependencies]
 pollster = { version = "0.4.0", features = ["macro"] }

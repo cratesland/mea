@@ -248,6 +248,7 @@ dependencies = [
 name = "mea"
 version = "0.3.2"
 dependencies = [
+ "parking_lot",
  "pollster",
  "slab",
  "tokio",

@@ -12,24 +12,84 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::fmt;
-use std::sync::PoisonError;
+#[cfg(feature = "parking_lot")]
+pub(crate) use parking_lot::*;
 
-pub(crate) struct Mutex<T: ?Sized>(std::sync::Mutex<T>);
+#[cfg(feature = "parking_lot")]
+mod parking_lot {
+    use std::fmt;
+    use std::marker::PhantomData;
+    use std::ops::{Deref, DerefMut};
 
-impl<T: ?Sized + fmt::Debug> fmt::Debug for Mutex<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
+    pub(crate) struct MutexGuard<'a, T: ?Sized>(
+        PhantomData<std::sync::MutexGuard<'a, T>>,
+        parking_lot::MutexGuard<'a, T>,
+    );
+
+    impl<'a, T: ?Sized> Deref for MutexGuard<'a, T> {
+        type Target = T;
+        fn deref(&self) -> &T {
+            self.1.deref()
+        }
+    }
+
+    impl<'a, T: ?Sized> DerefMut for MutexGuard<'a, T> {
+        fn deref_mut(&mut self) -> &mut T {
+            self.1.deref_mut()
+        }
+    }
+
+    impl<T: ?Sized + fmt::Debug> fmt::Debug for MutexGuard<'_, T> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            self.1.fmt(f)
+        }
+    }
+
+    pub(crate) struct Mutex<T: ?Sized>(PhantomData<std::sync::Mutex<T>>, parking_lot::Mutex<T>);
+
+    impl<T: ?Sized + fmt::Debug> fmt::Debug for Mutex<T> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            self.1.fmt(f)
+        }
+    }
+
+    impl<T> Mutex<T> {
+        pub(crate) const fn new(t: T) -> Self {
+            Mutex(PhantomData, parking_lot::Mutex::new(t))
+        }
+
+        pub(crate) fn lock(&self) -> MutexGuard<'_, T> {
+            MutexGuard(PhantomData, self.1.lock())
+        }
     }
 }
 
-impl<T> Mutex<T> {
-    pub(crate) const fn new(t: T) -> Self {
-        Self(std::sync::Mutex::new(t))
+#[cfg(not(feature = "parking_lot"))]
+pub(crate) use std_lock::*;
+
+#[cfg(not(feature = "parking_lot"))]
+mod std_lock {
+    use std::fmt;
+    use std::sync::PoisonError;
+
+    pub(crate) type MutexGuard<'a, T> = std::sync::MutexGuard<'a, T>;
+
+    pub(crate) struct Mutex<T: ?Sized>(std::sync::Mutex<T>);
+
+    impl<T: ?Sized + fmt::Debug> fmt::Debug for Mutex<T> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            self.0.fmt(f)
+        }
     }
 
-    pub(crate) fn lock(&self) -> std::sync::MutexGuard<'_, T> {
-        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    impl<T> Mutex<T> {
+        pub(crate) const fn new(t: T) -> Self {
+            Mutex(std::sync::Mutex::new(t))
+        }
+
+        pub(crate) fn lock(&self) -> MutexGuard<'_, T> {
+            self.0.lock().unwrap_or_else(PoisonError::into_inner)
+        }
     }
 }
 
@@ -37,7 +97,7 @@ impl<T> Mutex<T> {
 mod tests {
     use std::sync::Arc;
 
-    use crate::internal::Mutex;
+    use super::*;
 
     #[test]
     fn test_poison_mutex() {
