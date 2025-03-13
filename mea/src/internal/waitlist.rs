@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
+
 use slab::Slab;
 
 /// A guarded linked list.
@@ -36,6 +38,8 @@ impl<T> WaitList<T> {
         let mut nodes = Slab::new();
         let first = nodes.vacant_entry();
         let guard = first.key();
+        assert_eq!(guard, 0);
+
         first.insert(Node {
             prev: guard,
             next: guard,
@@ -139,6 +143,42 @@ impl<T> WaitList<T> {
         let node = &mut self.nodes[idx];
         if drop(node.stat.as_mut().unwrap()) {
             self.nodes.remove(idx);
+        }
+    }
+
+    #[inline]
+    pub(crate) fn maybe_compact(&mut self) {
+        const OCCUPIED_RATIO_THRESHOLD: f64 = 0.5;
+        const VACANT_SIZE_THRESHOLD: usize = 1024;
+
+        let occupied = self.nodes.len();
+        let capacity = self.nodes.capacity();
+        if capacity - occupied < VACANT_SIZE_THRESHOLD {
+            return;
+        }
+        if (occupied as f64) / (capacity as f64) > OCCUPIED_RATIO_THRESHOLD {
+            return;
+        }
+
+        let mut mapping = HashMap::new();
+        self.nodes.compact(|_, from, to| {
+            assert_ne!(
+                from, self.guard,
+                "guard must be the first element and never compacted"
+            );
+            mapping.insert(from, to);
+            true
+        });
+
+        let resolve_new_pos = |from| mapping.get(&from).map_or(from, |to| *to);
+        for (_, to) in mapping.iter() {
+            let to = *to;
+            let prev = resolve_new_pos(self.nodes[to].prev);
+            let next = resolve_new_pos(self.nodes[to].next);
+            self.nodes[to].prev = prev;
+            self.nodes[to].next = next;
+            self.nodes[prev].next = to;
+            self.nodes[next].prev = to;
         }
     }
 }

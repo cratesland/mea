@@ -118,6 +118,7 @@ impl Semaphore {
     pub(crate) fn release(&self, n: usize) {
         if n != 0 {
             self.insert_permits_with_lock(n, self.waiters.lock());
+            self.waiters.lock().maybe_compact();
         }
     }
 
@@ -138,10 +139,10 @@ impl Semaphore {
                 }
             }
         }
-        drop(waiters);
         for w in wakers.drain(..) {
             w.wake();
         }
+        waiters.maybe_compact();
     }
 
     fn insert_permits_with_lock(
@@ -215,6 +216,7 @@ impl Drop for Acquire<'_> {
             waiters.with_mut(index, |_| true); // drop
             if acquired > 0 {
                 self.semaphore.insert_permits_with_lock(acquired, waiters);
+                self.semaphore.waiters.lock().maybe_compact();
             }
         }
     }
