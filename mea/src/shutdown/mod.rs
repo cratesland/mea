@@ -87,8 +87,8 @@ impl ShutdownSend {
     }
 
     /// Wait for all [`ShutdownRecv`] handles to be dropped.
-    pub async fn await_shutdown(&self) {
-        self.wait.clone().await;
+    pub async fn await_shutdown(self) {
+        self.wait.await;
     }
 }
 
