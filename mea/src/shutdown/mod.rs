@@ -50,6 +50,7 @@
 //! # }
 //! ```
 
+use std::future::Future;
 use std::future::IntoFuture;
 use std::sync::Arc;
 
@@ -114,7 +115,7 @@ impl ShutdownRecv {
     /// Returns an owned future that resolves when the shutdown signal is received.
     ///
     /// The returned future has no lifetime constraints.
-    pub async fn is_shutdown_owned(&self) {
-        self.latch.clone().wait_owned().await;
+    pub fn is_shutdown_owned(&self) -> impl Future<Output = ()> + 'static {
+        self.latch.clone().wait_owned()
     }
 }

@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::future::pending;
+
 use super::*;
 use crate::test_runtime;
 
@@ -48,4 +50,27 @@ fn test_multiple_senders() {
     tx.shutdown();
     pollster::block_on(tx.await_shutdown());
     pollster::block_on(tx_clone.await_shutdown());
+}
+
+#[test]
+fn test_is_shutdown_owned_not_capture_self() {
+    struct State {
+        rx: ShutdownRecv,
+    }
+
+    async fn run_state(_state: &mut State) {
+        pending::<()>().await;
+    }
+
+    let (tx, rx) = new_pair();
+    let mut state = State { rx };
+    test_runtime().spawn(async move {
+        let is_shutdown = state.rx.is_shutdown_owned();
+        tokio::select! {
+            _ = is_shutdown => (),
+            _ = run_state(&mut state) => (),
+        }
+    });
+    tx.shutdown();
+    pollster::block_on(tx.await_shutdown());
 }
