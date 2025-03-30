@@ -57,6 +57,9 @@ use crate::latch::Latch;
 use crate::waitgroup::Wait;
 use crate::waitgroup::WaitGroup;
 
+#[cfg(test)]
+mod tests;
+
 /// Create a pair of handles for managing shutdown signals.
 ///
 /// See the [module level documentation](self) for more.

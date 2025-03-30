@@ -30,6 +30,8 @@
 //! * [`Mutex`]: A mutual exclusion primitive for protecting shared data
 //! * [`RwLock`]: A reader-writer lock that allows multiple readers or a single writer at a time
 //! * [`Semaphore`]: A synchronization primitive that controls access to a shared resource
+//! * [`ShutdownSend`] & [`ShutdownRecv`]: A composite synchronization primitive for managing
+//!   shutdown signals
 //! * [`WaitGroup`]: A synchronization primitive that allows waiting for multiple tasks to complete
 //!
 //! ## Runtime Agnostic
@@ -50,6 +52,8 @@
 //! [`Mutex`]: mutex::Mutex
 //! [`RwLock`]: rwlock::RwLock
 //! [`Semaphore`]: semaphore::Semaphore
+//! [`ShutdownSend`]: shutdown::ShutdownSend
+//! [`ShutdownRecv`]: shutdown::ShutdownRecv
 //! [`WaitGroup`]: waitgroup::WaitGroup
 
 pub(crate) mod internal;
@@ -83,6 +87,8 @@ mod tests {
     use crate::rwlock::RwLockReadGuard;
     use crate::rwlock::RwLockWriteGuard;
     use crate::semaphore::Semaphore;
+    use crate::shutdown::ShutdownRecv;
+    use crate::shutdown::ShutdownSend;
     use crate::waitgroup::WaitGroup;
 
     #[test]
@@ -92,6 +98,8 @@ mod tests {
         do_assert_send_and_sync::<Condvar>();
         do_assert_send_and_sync::<Latch>();
         do_assert_send_and_sync::<Semaphore>();
+        do_assert_send_and_sync::<ShutdownSend>();
+        do_assert_send_and_sync::<ShutdownRecv>();
         do_assert_send_and_sync::<WaitGroup>();
         do_assert_send_and_sync::<Mutex<i64>>();
         do_assert_send_and_sync::<MutexGuard<'_, i64>>();
@@ -107,6 +115,8 @@ mod tests {
         do_assert_unpin::<Condvar>();
         do_assert_unpin::<Latch>();
         do_assert_unpin::<Semaphore>();
+        do_assert_unpin::<ShutdownSend>();
+        do_assert_unpin::<ShutdownRecv>();
         do_assert_unpin::<WaitGroup>();
         do_assert_unpin::<Mutex<i64>>();
         do_assert_unpin::<MutexGuard<'_, i64>>();
