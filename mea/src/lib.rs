@@ -60,6 +60,7 @@ pub mod latch;
 pub mod mutex;
 pub mod rwlock;
 pub mod semaphore;
+pub mod shutdown;
 pub mod waitgroup;
 
 #[cfg(test)]
