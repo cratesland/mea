@@ -55,6 +55,7 @@
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::Context;
 use std::task::Poll;
 
@@ -212,9 +213,60 @@ impl Latch {
         };
         fut.await
     }
+
+    /// Returns a future that will complete when the latch count reaches zero.
+    ///
+    /// The latch must be wrapped in an [`Arc`] to call this method. Thus, the returned future has
+    /// no lifetime constraints.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use std::sync::Arc;
+    ///
+    /// use mea::latch::Latch;
+    ///
+    /// let latch = Arc::new(Latch::new(1));
+    /// let latch2 = latch.clone();
+    ///
+    /// // Spawn a task that will wait for the latch
+    /// let handle = tokio::spawn(async move {
+    ///     latch2.wait_owned().await;
+    ///     println!("Latch reached zero!");
+    /// });
+    ///
+    /// // Count down the latch
+    /// latch.count_down();
+    /// handle.await.unwrap();
+    /// # }
+    /// ```
+    pub async fn wait_owned(self: Arc<Self>) {
+        let fut = OwnedLatchWait {
+            idx: None,
+            latch: self,
+        };
+        fut.await
+    }
 }
 
-/// A future returned by [`Latch::wait()`].
+impl Latch {
+    fn intern_poll(&self, idx: &mut Option<usize>, cx: &mut Context<'_>) -> Poll<()> {
+        // register waker if the counter is not zero
+        if self.state.spin_wait(16).is_err() {
+            self.state.register_waker(idx, cx);
+            // double check after register waker, to catch the update between two steps
+            if self.state.spin_wait(0).is_err() {
+                return Poll::Pending;
+            }
+        }
+
+        Poll::Ready(())
+    }
+}
+
+/// A wait future returned by [`Latch::wait()`].
 ///
 /// This future will complete when the latch count reaches zero.
 #[must_use = "futures do nothing unless you `.await` or poll them"]
@@ -234,16 +286,30 @@ impl Future for LatchWait<'_> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let Self { idx, latch } = self.get_mut();
+        latch.intern_poll(idx, cx)
+    }
+}
 
-        // register waker if the counter is not zero
-        if latch.state.spin_wait(16).is_err() {
-            latch.state.register_waker(idx, cx);
-            // double check after register waker, to catch the update between two steps
-            if latch.state.spin_wait(0).is_err() {
-                return Poll::Pending;
-            }
-        }
+/// An owned wait future returned by [`Latch::wait()`].
+///
+/// This future will complete when the latch count reaches zero.
+#[must_use = "futures do nothing unless you `.await` or poll them"]
+pub struct OwnedLatchWait {
+    idx: Option<usize>,
+    latch: Arc<Latch>,
+}
 
-        Poll::Ready(())
+impl fmt::Debug for OwnedLatchWait {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("OwnedLatchWait").finish_non_exhaustive()
+    }
+}
+
+impl Future for OwnedLatchWait {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let Self { idx, latch } = self.get_mut();
+        latch.intern_poll(idx, cx)
     }
 }
