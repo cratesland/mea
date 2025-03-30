@@ -31,16 +31,15 @@
 //!
 //! use mea::waitgroup::WaitGroup;
 //! let wg = WaitGroup::new();
-//! let mut handles = Vec::new();
 //!
 //! for i in 0..3 {
 //!     let wg = wg.clone();
-//!     handles.push(tokio::spawn(async move {
+//!     tokio::spawn(async move {
 //!         println!("Task {} starting", i);
 //!         tokio::time::sleep(Duration::from_millis(100)).await;
 //!         // wg is automatically decremented when dropped
 //!         drop(wg);
-//!     }));
+//!     });
 //! }
 //!
 //! // Wait for all tasks to complete
@@ -141,11 +140,25 @@ impl IntoFuture for WaitGroup {
 
 /// A future that completes when all tasks in a WaitGroup have finished.
 ///
-/// This type is created by awaiting on a [`WaitGroup`].
+/// This type is created by either: (1) calling `.await` on a `WaitGroup`, or (2) cloning
+/// itself, which does not increase the WaitGroup counter, but creates a new future that
+/// will complete when the WaitGroup counter reaches zero.
 #[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct Wait {
     idx: Option<usize>,
     state: Arc<CountdownState>,
+}
+
+impl Clone for Wait {
+    /// Creates a new future that also completes when the WaitGroup counter reaches zero.
+    ///
+    /// This does not increment the WaitGroup counter.
+    fn clone(&self) -> Self {
+        Wait {
+            idx: None,
+            state: self.state.clone(),
+        }
+    }
 }
 
 impl fmt::Debug for Wait {
