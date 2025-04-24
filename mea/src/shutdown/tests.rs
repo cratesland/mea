@@ -53,6 +53,14 @@ fn test_multiple_senders() {
 }
 
 #[test]
+fn test_is_shutdown_now() {
+    let (tx, rx) = new_pair();
+    assert!(!rx.is_shutdown_now());
+    tx.shutdown();
+    assert!(rx.is_shutdown_now());
+}
+
+#[test]
 fn test_is_shutdown_owned_not_capture_self() {
     struct State {
         rx: ShutdownRecv,

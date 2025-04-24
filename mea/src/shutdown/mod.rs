@@ -107,6 +107,11 @@ pub struct ShutdownRecv {
 }
 
 impl ShutdownRecv {
+    /// Returns whether the shutdown signal has been received.
+    pub fn is_shutdown_now(&self) -> bool {
+        self.latch.try_wait().is_ok()
+    }
+
     /// Returns a future that resolves when the shutdown signal is received.
     pub async fn is_shutdown(&self) {
         self.latch.wait().await;
