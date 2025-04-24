@@ -14,7 +14,7 @@
 
 [package]
 name = "mea"
-version = "0.3.4"
+version = "0.3.5"
 
 categories = ["asynchronous", "concurrency"]
 description = "A runtime-agnostic library providing essential synchronization primitives for asynchronous Rust programming."
