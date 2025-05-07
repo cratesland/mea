@@ -430,21 +430,80 @@ impl SemaphorePermit<'_> {
         self.permits = 0;
     }
 
-    /// Releases `n` permits back to the semaphore.
+    /// Merge two [`SemaphorePermit`] instances together, consuming `other`
+    /// without releasing the permits it holds.
+    ///
+    /// Permits held by both `self` and `other` are released when `self` drops.
     ///
     /// # Panics
     ///
-    /// Panics if `n` is greater than the number of permits held by this structure.
-    pub fn release(&mut self, n: usize) {
+    /// This function panics if permits from different [`Semaphore`] instances
+    /// are merged.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    ///
+    /// use mea::semaphore::Semaphore;
+    ///
+    /// let sem = Arc::new(Semaphore::new(10));
+    /// let mut permit = sem.try_acquire(1).unwrap();
+    ///
+    /// for _ in 0..9 {
+    ///     let new_permit = sem.try_acquire(1).unwrap();
+    ///     // Merge individual permits into a single one.
+    ///     permit.merge(new_permit)
+    /// }
+    ///
+    /// assert_eq!(sem.available_permits(), 0);
+    ///
+    /// // Release all permits in a single batch.
+    /// drop(permit);
+    ///
+    /// assert_eq!(sem.available_permits(), 10);
+    /// ```
+    #[track_caller]
+    pub fn merge(&mut self, mut other: Self) {
         assert!(
-            n <= self.permits,
-            "release more permits ({}) than held ({})",
-            n,
-            self.permits
+            std::ptr::eq(self.sem, other.sem),
+            "merging permits from different semaphore instances"
         );
+        self.permits += other.permits;
+        other.permits = 0;
+    }
+
+    /// Splits `n` permits from `self` and returns a new [`SemaphorePermit`] instance that holds `n`
+    /// permits.
+    ///
+    /// If there are insufficient permits, and it is impossible to reduce by `n`, returns `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    ///
+    /// use mea::semaphore::Semaphore;
+    ///
+    /// let sem = Arc::new(Semaphore::new(3));
+    ///
+    /// let mut p1 = sem.try_acquire(3).unwrap();
+    /// let p2 = p1.split(1).unwrap();
+    ///
+    /// assert_eq!(p1.permits(), 2);
+    /// assert_eq!(p2.permits(), 1);
+    /// ```
+    pub fn split(&mut self, n: usize) -> Option<Self> {
+        if n > self.permits {
+            return None;
+        }
 
         self.permits -= n;
-        self.sem.release(n);
+
+        Some(Self {
+            sem: self.sem,
+            permits: n,
+        })
     }
 
     /// Returns the number of permits this permit holds.
@@ -509,21 +568,84 @@ impl OwnedSemaphorePermit {
         self.permits = 0;
     }
 
-    /// Releases `n` permits back to the semaphore.
+    /// Merge two [`SemaphorePermit`] instances together, consuming `other`
+    /// without releasing the permits it holds.
+    ///
+    /// Permits held by both `self` and `other` are released when `self` drops.
     ///
     /// # Panics
     ///
-    /// Panics if `n` is greater than the number of permits held by this structure.
-    pub fn release(&mut self, n: usize) {
+    /// This function panics if permits from different [`Semaphore`] instances
+    /// are merged.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    ///
+    /// use mea::semaphore::Semaphore;
+    ///
+    /// let sem = Arc::new(Semaphore::new(10));
+    /// let mut permit = sem.try_acquire(1).unwrap();
+    ///
+    /// for _ in 0..9 {
+    ///     let new_permit = sem.try_acquire(1).unwrap();
+    ///     // Merge individual permits into a single one.
+    ///     permit.merge(new_permit)
+    /// }
+    ///
+    /// assert_eq!(sem.available_permits(), 0);
+    ///
+    /// // Release all permits in a single batch.
+    /// drop(permit);
+    ///
+    /// assert_eq!(sem.available_permits(), 10);
+    /// ```
+    #[track_caller]
+    pub fn merge(&mut self, mut other: Self) {
         assert!(
-            n <= self.permits,
-            "release more permits ({}) than held ({})",
-            n,
-            self.permits
+            Arc::ptr_eq(&self.sem, &other.sem),
+            "merging permits from different semaphore instances"
         );
+        self.permits += other.permits;
+        other.permits = 0;
+    }
+
+    /// Splits `n` permits from `self` and returns a new [`OwnedSemaphorePermit`] instance that
+    /// holds `n` permits.
+    ///
+    /// If there are insufficient permits, and it is impossible to reduce by `n`, returns `None`.
+    ///
+    /// # Note
+    ///
+    /// It will clone the owned `Arc<Semaphore>` to construct the new instance.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    ///
+    /// use mea::semaphore::Semaphore;
+    ///
+    /// let sem = Arc::new(Semaphore::new(3));
+    ///
+    /// let mut p1 = sem.try_acquire_owned(3).unwrap();
+    /// let p2 = p1.split(1).unwrap();
+    ///
+    /// assert_eq!(p1.permits(), 2);
+    /// assert_eq!(p2.permits(), 1);
+    /// ```
+    pub fn split(&mut self, n: usize) -> Option<Self> {
+        if n > self.permits {
+            return None;
+        }
 
         self.permits -= n;
-        self.sem.release(n);
+
+        Some(Self {
+            sem: self.sem.clone(),
+            permits: n,
+        })
     }
 
     /// Returns the number of permits this permit holds.
