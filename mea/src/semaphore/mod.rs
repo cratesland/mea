@@ -430,6 +430,23 @@ impl SemaphorePermit<'_> {
         self.permits = 0;
     }
 
+    /// Releases `n` permits back to the semaphore.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `n` is greater than the number of permits held by this structure.
+    pub fn release(&mut self, n: usize) {
+        assert!(
+            n <= self.permits,
+            "release more permits ({}) than held ({})",
+            n,
+            self.permits
+        );
+
+        self.permits -= n;
+        self.sem.release(n);
+    }
+
     /// Returns the number of permits this permit holds.
     ///
     /// # Examples
@@ -490,6 +507,23 @@ impl OwnedSemaphorePermit {
     /// ```
     pub fn forget(mut self) {
         self.permits = 0;
+    }
+
+    /// Releases `n` permits back to the semaphore.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `n` is greater than the number of permits held by this structure.
+    pub fn release(&mut self, n: usize) {
+        assert!(
+            n <= self.permits,
+            "release more permits ({}) than held ({})",
+            n,
+            self.permits
+        );
+
+        self.permits -= n;
+        self.sem.release(n);
     }
 
     /// Returns the number of permits this permit holds.
