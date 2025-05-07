@@ -447,17 +447,6 @@ impl SemaphorePermit<'_> {
         self.sem.release(n);
     }
 
-    /// Releases at most `n` permits back to the semaphore.
-    ///
-    /// If `n` is greater than the number of permits held by this structure, releases
-    /// all the permits held by this structure.
-    pub fn saturating_release(&mut self, n: usize) {
-        let n = self.permits.min(n);
-
-        self.permits -= n;
-        self.sem.release(n);
-    }
-
     /// Returns the number of permits this permit holds.
     ///
     /// # Examples
@@ -532,17 +521,6 @@ impl OwnedSemaphorePermit {
             n,
             self.permits
         );
-
-        self.permits -= n;
-        self.sem.release(n);
-    }
-
-    /// Releases at most `n` permits back to the semaphore.
-    ///
-    /// If `n` is greater than the number of permits held by this structure, releases
-    /// all the permits held by this structure.
-    pub fn saturating_release(&mut self, n: usize) {
-        let n = self.permits.min(n);
 
         self.permits -= n;
         self.sem.release(n);
