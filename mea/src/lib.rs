@@ -33,6 +33,7 @@
 //! * [`ShutdownSend`] & [`ShutdownRecv`]: A composite synchronization primitive for managing
 //!   shutdown signals
 //! * [`WaitGroup`]: A synchronization primitive that allows waiting for multiple tasks to complete
+//! * [`oneshot`]: A one-shot channel for sending a single value between tasks.
 //!
 //! ## Runtime Agnostic
 //!
@@ -62,6 +63,7 @@ pub mod barrier;
 pub mod condvar;
 pub mod latch;
 pub mod mutex;
+pub mod oneshot;
 pub mod rwlock;
 pub mod semaphore;
 pub mod shutdown;
@@ -83,12 +85,14 @@ mod tests {
     use crate::latch::Latch;
     use crate::mutex::Mutex;
     use crate::mutex::MutexGuard;
+    use crate::oneshot;
     use crate::rwlock::RwLock;
     use crate::rwlock::RwLockReadGuard;
     use crate::rwlock::RwLockWriteGuard;
     use crate::semaphore::Semaphore;
     use crate::shutdown::ShutdownRecv;
     use crate::shutdown::ShutdownSend;
+    use crate::waitgroup::Wait;
     use crate::waitgroup::WaitGroup;
 
     #[test]
@@ -106,6 +110,15 @@ mod tests {
         do_assert_send_and_sync::<RwLock<i64>>();
         do_assert_send_and_sync::<RwLockReadGuard<'_, i64>>();
         do_assert_send_and_sync::<RwLockWriteGuard<'_, i64>>();
+        do_assert_send_and_sync::<oneshot::Sender<i64>>();
+        do_assert_send_and_sync::<oneshot::SendError<i64>>();
+    }
+
+    #[test]
+    fn assert_send() {
+        fn do_assert_send<T: Send>() {}
+        do_assert_send::<oneshot::Receiver<i64>>();
+        do_assert_send::<oneshot::Recv<i64>>();
     }
 
     #[test]
@@ -118,10 +131,14 @@ mod tests {
         do_assert_unpin::<ShutdownSend>();
         do_assert_unpin::<ShutdownRecv>();
         do_assert_unpin::<WaitGroup>();
+        do_assert_unpin::<Wait>();
         do_assert_unpin::<Mutex<i64>>();
         do_assert_unpin::<MutexGuard<'_, i64>>();
         do_assert_unpin::<RwLock<i64>>();
         do_assert_unpin::<RwLockReadGuard<'_, i64>>();
         do_assert_unpin::<RwLockWriteGuard<'_, i64>>();
+        do_assert_unpin::<oneshot::Sender<i64>>();
+        do_assert_unpin::<oneshot::Receiver<i64>>();
+        do_assert_unpin::<oneshot::Recv<i64>>();
     }
 }
