@@ -12,10 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::future::Future;
 use std::future::IntoFuture;
+use std::mem;
+use std::pin::Pin;
+use std::sync::atomic::AtomicU32;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::task::Context;
+use std::task::Poll;
+use std::task::RawWaker;
+use std::task::RawWakerVTable;
+use std::task::Waker;
 use std::time::Duration;
 
 use crate::oneshot;
@@ -111,17 +120,17 @@ async fn poll_receiver_then_drop_it() {
 #[tokio::test]
 async fn recv_within_select() {
     let (tx, rx) = oneshot::channel::<&'static str>();
-    let mut interval = tokio::time::interval(Duration::from_secs(100));
+    let mut interval = tokio::time::interval(Duration::from_millis(10));
 
     let handle = tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
         tx.send("shut down").unwrap();
     });
 
     let mut recv = rx.into_future();
     loop {
         tokio::select! {
-            _ = interval.tick() => println!("another 100ms"),
+            _ = interval.tick() => println!("another 10ms"),
             msg = &mut recv => {
                 println!("Got message: {}", msg.unwrap());
                 break;
@@ -130,4 +139,148 @@ async fn recv_within_select() {
     }
 
     handle.await.unwrap();
+}
+
+#[derive(Default)]
+pub struct WakerHandle {
+    clone_count: AtomicU32,
+    drop_count: AtomicU32,
+    wake_count: AtomicU32,
+}
+
+impl WakerHandle {
+    pub fn clone_count(&self) -> u32 {
+        self.clone_count.load(Ordering::Relaxed)
+    }
+
+    pub fn drop_count(&self) -> u32 {
+        self.drop_count.load(Ordering::Relaxed)
+    }
+
+    pub fn wake_count(&self) -> u32 {
+        self.wake_count.load(Ordering::Relaxed)
+    }
+}
+
+fn waker() -> (Waker, Arc<WakerHandle>) {
+    let waker_handle = Arc::new(WakerHandle::default());
+    let waker_handle_ptr = Arc::into_raw(waker_handle.clone());
+    let raw_waker = RawWaker::new(waker_handle_ptr as *const _, waker_vtable());
+    (unsafe { Waker::from_raw(raw_waker) }, waker_handle)
+}
+
+fn waker_vtable() -> &'static RawWakerVTable {
+    &RawWakerVTable::new(clone_raw, wake_raw, wake_by_ref_raw, drop_raw)
+}
+
+unsafe fn clone_raw(data: *const ()) -> RawWaker {
+    let handle: Arc<WakerHandle> = Arc::from_raw(data as *const _);
+    handle.clone_count.fetch_add(1, Ordering::Relaxed);
+    mem::forget(handle.clone());
+    mem::forget(handle);
+    RawWaker::new(data, waker_vtable())
+}
+
+unsafe fn wake_raw(data: *const ()) {
+    let handle: Arc<WakerHandle> = Arc::from_raw(data as *const _);
+    handle.wake_count.fetch_add(1, Ordering::Relaxed);
+    handle.drop_count.fetch_add(1, Ordering::Relaxed);
+}
+
+unsafe fn wake_by_ref_raw(data: *const ()) {
+    let handle: Arc<WakerHandle> = Arc::from_raw(data as *const _);
+    handle.wake_count.fetch_add(1, Ordering::Relaxed);
+    mem::forget(handle)
+}
+
+unsafe fn drop_raw(data: *const ()) {
+    let handle: Arc<WakerHandle> = Arc::from_raw(data as *const _);
+    handle.drop_count.fetch_add(1, Ordering::Relaxed);
+    drop(handle)
+}
+
+#[test]
+fn poll_then_send() {
+    let (sender, receiver) = oneshot::channel::<u128>();
+    let mut receiver = receiver.into_future();
+
+    let (waker, waker_handle) = waker();
+    let mut context = Context::from_waker(&waker);
+
+    assert_eq!(Pin::new(&mut receiver).poll(&mut context), Poll::Pending);
+    assert_eq!(waker_handle.clone_count(), 1);
+    assert_eq!(waker_handle.drop_count(), 0);
+    assert_eq!(waker_handle.wake_count(), 0);
+
+    sender.send(1234).unwrap();
+    assert_eq!(waker_handle.clone_count(), 1);
+    assert_eq!(waker_handle.drop_count(), 1);
+    assert_eq!(waker_handle.wake_count(), 1);
+
+    assert_eq!(
+        Pin::new(&mut receiver).poll(&mut context),
+        Poll::Ready(Ok(1234))
+    );
+    assert_eq!(waker_handle.clone_count(), 1);
+    assert_eq!(waker_handle.drop_count(), 1);
+    assert_eq!(waker_handle.wake_count(), 1);
+}
+
+#[test]
+fn poll_with_different_wakers() {
+    let (sender, receiver) = oneshot::channel::<u128>();
+    let mut receiver = receiver.into_future();
+
+    let (waker1, waker_handle1) = waker();
+    let mut context1 = Context::from_waker(&waker1);
+
+    assert_eq!(Pin::new(&mut receiver).poll(&mut context1), Poll::Pending);
+    assert_eq!(waker_handle1.clone_count(), 1);
+    assert_eq!(waker_handle1.drop_count(), 0);
+    assert_eq!(waker_handle1.wake_count(), 0);
+
+    let (waker2, waker_handle2) = waker();
+    let mut context2 = Context::from_waker(&waker2);
+
+    assert_eq!(Pin::new(&mut receiver).poll(&mut context2), Poll::Pending);
+    assert_eq!(waker_handle1.clone_count(), 1);
+    assert_eq!(waker_handle1.drop_count(), 1);
+    assert_eq!(waker_handle1.wake_count(), 0);
+
+    assert_eq!(waker_handle2.clone_count(), 1);
+    assert_eq!(waker_handle2.drop_count(), 0);
+    assert_eq!(waker_handle2.wake_count(), 0);
+
+    // Sending should cause the waker from the latest poll to be woken up
+    sender.send(1234).unwrap();
+    assert_eq!(waker_handle1.clone_count(), 1);
+    assert_eq!(waker_handle1.drop_count(), 1);
+    assert_eq!(waker_handle1.wake_count(), 0);
+
+    assert_eq!(waker_handle2.clone_count(), 1);
+    assert_eq!(waker_handle2.drop_count(), 1);
+    assert_eq!(waker_handle2.wake_count(), 1);
+}
+
+#[test]
+fn poll_then_drop_receiver_during_send() {
+    let (sender, receiver) = oneshot::channel::<u128>();
+    let mut receiver = receiver.into_future();
+
+    let (waker, _waker_handle) = waker();
+    let mut context = Context::from_waker(&waker);
+
+    // Put the channel into the receiving state
+    assert_eq!(Pin::new(&mut receiver).poll(&mut context), Poll::Pending);
+
+    // Spawn a separate thread that sends in parallel
+    let t = std::thread::spawn(move || {
+        let _ = sender.send(1234);
+    });
+
+    // Drop the receiver.
+    drop(receiver);
+
+    // The send operation should also not have panicked
+    t.join().unwrap();
 }
