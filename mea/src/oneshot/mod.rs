@@ -77,7 +77,6 @@ use std::fmt;
 use std::future::Future;
 use std::future::IntoFuture;
 use std::hint;
-use std::marker::PhantomData;
 use std::mem;
 use std::mem::MaybeUninit;
 use std::pin::Pin;
@@ -96,19 +95,13 @@ mod tests;
 /// Creates a new oneshot channel and returns the two endpoints, [`Sender`] and [`Receiver`].
 pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
     let channel_ptr = NonNull::from(Box::leak(Box::new(Channel::new())));
-    let sender = Sender {
-        channel_ptr,
-        _invariant: PhantomData,
-    };
-    let receiver = Receiver { channel_ptr };
-    (sender, receiver)
+    (Sender { channel_ptr }, Receiver { channel_ptr })
 }
 
 /// Sends a value to the associated [`Receiver`].
 #[derive(Debug)]
 pub struct Sender<T> {
     channel_ptr: NonNull<Channel<T>>,
-    _invariant: PhantomData<fn(T) -> T>,
 }
 
 unsafe impl<T: Send> Send for Sender<T> {}
