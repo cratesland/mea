@@ -33,7 +33,10 @@
 //! * [`ShutdownSend`] & [`ShutdownRecv`]: A composite synchronization primitive for managing
 //!   shutdown signals
 //! * [`WaitGroup`]: A synchronization primitive that allows waiting for multiple tasks to complete
-//! * [`oneshot`]: A one-shot channel for sending a single value between tasks.
+//! * [`atomicbox`]: A safe, owning version of `AtomicPtr` for heap-allocated data.
+//! * [`mpsc::unbounded`]: A multi-producer, single-consumer unbounded queue for sending values
+//!   between asynchronous tasks.
+//! * [`oneshot::channel`]: A one-shot channel for sending a single value between tasks.
 //!
 //! ## Runtime Agnostic
 //!
@@ -59,9 +62,11 @@
 
 pub(crate) mod internal;
 
+pub mod atomicbox;
 pub mod barrier;
 pub mod condvar;
 pub mod latch;
+pub mod mpsc;
 pub mod mutex;
 pub mod oneshot;
 pub mod rwlock;
@@ -83,6 +88,7 @@ mod tests {
     use crate::barrier::Barrier;
     use crate::condvar::Condvar;
     use crate::latch::Latch;
+    use crate::mpsc;
     use crate::mutex::Mutex;
     use crate::mutex::MutexGuard;
     use crate::oneshot;
@@ -112,6 +118,8 @@ mod tests {
         do_assert_send_and_sync::<RwLockWriteGuard<'_, i64>>();
         do_assert_send_and_sync::<oneshot::Sender<i64>>();
         do_assert_send_and_sync::<oneshot::SendError<i64>>();
+        do_assert_send_and_sync::<mpsc::UnboundedSender<i64>>();
+        do_assert_send_and_sync::<mpsc::SendError<i64>>();
     }
 
     #[test]
@@ -119,6 +127,7 @@ mod tests {
         fn do_assert_send<T: Send>() {}
         do_assert_send::<oneshot::Receiver<i64>>();
         do_assert_send::<oneshot::Recv<i64>>();
+        do_assert_send::<mpsc::UnboundedReceiver<i64>>();
     }
 
     #[test]
