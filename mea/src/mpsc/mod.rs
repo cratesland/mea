@@ -24,7 +24,6 @@ use std::task::Poll;
 use std::task::Waker;
 
 use crate::atomicbox::AtomicOptionBox;
-use crate::internal::Mutex;
 
 #[cfg(test)]
 mod tests;
@@ -50,7 +49,7 @@ pub fn unbounded<T>() -> (UnboundedSender<T>, UnboundedReceiver<T>) {
     };
     let receiver = UnboundedReceiver {
         state: state.clone(),
-        receiver: Mutex::new(receiver),
+        receiver,
     };
     (sender, receiver)
 }
@@ -165,8 +164,11 @@ impl<T> std::error::Error for SendError<T> {}
 /// Instances are created by the [`unbounded`] function.
 pub struct UnboundedReceiver<T> {
     state: Arc<UnboundedState>,
-    receiver: Mutex<std::sync::mpsc::Receiver<T>>,
+    receiver: std::sync::mpsc::Receiver<T>,
 }
+
+unsafe impl<T: Send> Send for UnboundedReceiver<T> {}
+unsafe impl<T: Send> Sync for UnboundedReceiver<T> {}
 
 impl<T> fmt::Debug for UnboundedReceiver<T> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -210,7 +212,7 @@ impl<T> UnboundedReceiver<T> {
     /// # }
     /// ```
     pub fn try_recv(&mut self) -> Result<T, TryRecvError> {
-        match self.receiver.get_mut().try_recv() {
+        match self.receiver.try_recv() {
             Ok(v) => Ok(v),
             Err(std::sync::mpsc::TryRecvError::Disconnected) => Err(TryRecvError::Disconnected),
             Err(std::sync::mpsc::TryRecvError::Empty) => Err(TryRecvError::Empty),
