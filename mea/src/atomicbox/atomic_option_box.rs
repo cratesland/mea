@@ -90,19 +90,20 @@ impl<T> AtomicOptionBox<T> {
         }
     }
 
-    /// Atomically set this `AtomicOptionBox` to `other` and return the
-    /// previous value.
+    /// Atomically set this `AtomicOptionBox` to `other` and return the previous value.
     ///
-    /// This does not allocate or free memory, and it neither clones nor drops
-    /// any values.  `other` is moved into `self`; the value previously in
-    /// `self` is returned.
+    /// This does not allocate or free memory, and it neither clones nor drops any values. `other`
+    /// is moved into `self`; the value previously in `self` is returned.
     ///
-    /// `order` must be either `Ordering::AcqRel` or `Ordering::SeqCst`,
+    /// If `other` is `Some`, `order` must be either `Ordering::AcqRel` or `Ordering::SeqCst`,
     /// as other values would not be safe if `T` contains any data.
+    ///
+    /// If `other` is `None`, `order` must be `Ordering::Acquire`, `Ordering::AcqRel`, or
+    /// `Ordering::SeqCst`,
     ///
     /// # Panics
     ///
-    /// Panics if `order` is not one of the two allowed values.
+    /// Panics if `order` is not one of the allowed values.
     ///
     /// # Examples
     ///
@@ -116,9 +117,16 @@ impl<T> AtomicOptionBox<T> {
     /// assert_eq!(prev_value, None);
     /// ```
     pub fn swap(&self, other: Option<Box<T>>, order: Ordering) -> Option<Box<T>> {
-        match order {
-            Ordering::AcqRel | Ordering::SeqCst => {}
-            order => panic!("invalid ordering for atomic swap: {order:?}"),
+        match (&other, order) {
+            (Some(_), Ordering::AcqRel | Ordering::SeqCst) => {}
+            (None, Ordering::Acquire | Ordering::AcqRel | Ordering::SeqCst) => {}
+            (o, order) => {
+                if o.is_some() {
+                    panic!("atomic swap on Some has invalid order {order:?}");
+                } else {
+                    panic!("atomic swap on None has invalid order {order:?}");
+                }
+            }
         }
 
         let new_ptr = into_ptr(other);
@@ -126,17 +134,19 @@ impl<T> AtomicOptionBox<T> {
         unsafe { from_ptr(old_ptr) }
     }
 
-    /// Atomically set this `AtomicOptionBox` to `other` and drop the
-    /// previous value.
+    /// Atomically set this `AtomicOptionBox` to `other` and drop the previous value.
     ///
     /// The `AtomicOptionBox` takes ownership of `other`.
     ///
-    /// `order` must be either `Ordering::AcqRel` or `Ordering::SeqCst`,
+    /// If `other` is `Some`, `order` must be either `Ordering::AcqRel` or `Ordering::SeqCst`,
     /// as other values would not be safe if `T` contains any data.
+    ///
+    /// If `other` is `None`, `order` must be `Ordering::Acquire`, `Ordering::AcqRel`, or
+    /// `Ordering::SeqCst`,
     ///
     /// # Panics
     ///
-    /// Panics if `order` is not one of the two allowed values.
+    /// Panics if `order` is not one of the allowed values.
     ///
     /// # Examples
     ///
@@ -153,18 +163,17 @@ impl<T> AtomicOptionBox<T> {
         self.swap(other, order);
     }
 
-    /// Atomically set this `AtomicOptionBox` to `None` and return the
-    /// previous value.
+    /// Atomically set this `AtomicOptionBox` to `None` and return the previous value.
     ///
-    /// This does not allocate or free memory, and it neither clones nor drops
-    /// any values. It is equivalent to calling `self.swap(None, order)`
+    /// This does not allocate or free memory, and it neither clones nor drops any values. It is
+    /// equivalent to calling `self.swap(None, order)`
     ///
     /// `order` must be `Ordering::Acquire`, `Ordering::AcqRel`, or `Ordering::SeqCst`,
     /// as other values would not be safe if `T` contains any data.
     ///
     /// # Panics
     ///
-    /// Panics if `order` is not one of the three allowed values.
+    /// Panics if `order` is not one of the allowed values.
     ///
     /// # Examples
     ///
@@ -180,26 +189,23 @@ impl<T> AtomicOptionBox<T> {
     /// assert!(prev_value.is_none());
     /// ```
     pub fn take(&self, order: Ordering) -> Option<Box<T>> {
-        match order {
-            Ordering::Acquire | Ordering::AcqRel | Ordering::SeqCst => {}
-            order => panic!("invalid ordering for atomic swap: {order:?}"),
-        }
-
-        let ptr = self.ptr.swap(ptr::null_mut(), order);
-        unsafe { from_ptr(ptr) }
+        self.swap(None, order)
     }
 
     /// Atomically swaps the contents of this `AtomicOptionBox` with the contents of `other`.
     ///
-    /// This does not allocate or free memory, and it neither clones nor drops
-    /// any values. The pointers in `*other` and `self` are simply exchanged.
+    /// This does not allocate or free memory, and it neither clones nor drops any values. The
+    /// pointers in `*other` and `self` are simply exchanged.
     ///
-    /// `order` must be either `Ordering::AcqRel` or `Ordering::SeqCst`,
+    /// If `other` is `Some`, `order` must be either `Ordering::AcqRel` or `Ordering::SeqCst`,
     /// as other values would not be safe if `T` contains any data.
+    ///
+    /// If `other` is `None`, `order` must be `Ordering::Acquire`, `Ordering::AcqRel`, or
+    /// `Ordering::SeqCst`,
     ///
     /// # Panics
     ///
-    /// Panics if `order` is not one of the two allowed values.
+    /// Panics if `order` is not one of the allowed values.
     ///
     /// # Examples
     ///
@@ -369,7 +375,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "invalid ordering for atomic swap")]
+    #[should_panic(expected = "atomic swap on None has invalid order Release")]
     fn cant_use_foolish_swap_ordering_type() {
         let atom = AtomicOptionBox::new(Some(Box::new(0)));
         atom.swap(None, Ordering::Release); // nope
