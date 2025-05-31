@@ -92,7 +92,7 @@ impl<T> Drop for UnboundedSender<T> {
             1 => {
                 // If this is the last sender, we need to wake up the receiver so it can
                 // observe the disconnected state.
-                if let Some(waker) = self.state.rx_task.swap(None, Ordering::AcqRel) {
+                if let Some(waker) = self.state.rx_task.take(Ordering::Acquire) {
                     waker.wake();
                 }
             }
@@ -117,7 +117,7 @@ impl<T> UnboundedSender<T> {
         let sender = self.sender.as_ref().unwrap();
         sender.send(value).map_err(|err| SendError(err.0))?;
 
-        if let Some(waker) = self.state.rx_task.swap(None, Ordering::AcqRel) {
+        if let Some(waker) = self.state.rx_task.take(Ordering::Acquire) {
             waker.wake();
         }
 
