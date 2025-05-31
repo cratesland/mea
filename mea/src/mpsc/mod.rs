@@ -14,6 +14,7 @@
 
 //! A multi-producer, single-consumer queue for sending values between asynchronous tasks.
 
+use self::mpsc_queue::*;
 use std::fmt;
 use std::future::poll_fn;
 use std::sync::atomic::AtomicUsize;
@@ -307,3 +308,76 @@ impl fmt::Display for TryRecvError {
 }
 
 impl std::error::Error for TryRecvError {}
+
+// http://www.1024cores.net/home/lock-free-algorithms/queues/non-intrusive-mpsc-node-based-queue
+mod mpsc_queue {
+    use std::cell::UnsafeCell;
+    use std::sync::atomic::{AtomicPtr, Ordering};
+
+    struct Node<T> {
+        next: AtomicPtr<Node<T>>,
+        value: Option<T>,
+    }
+
+    fn make_node<T>(v: Option<T>) -> *mut Node<T> {
+        Box::into_raw(Box::new(Node {
+            next: AtomicPtr::new(std::ptr::null_mut()),
+            value: v,
+        }))
+    }
+
+    pub struct Queue<T> {
+        head: AtomicPtr<Node<T>>,
+        tail: UnsafeCell<*mut Node<T>>,
+    }
+
+    unsafe impl<T: Send> Send for Queue<T> {}
+    unsafe impl<T: Send> Sync for Queue<T> {}
+
+    impl<T> Drop for Queue<T> {
+        fn drop(&mut self) {
+            let mut tail = *self.tail.get_mut();
+            while !tail.is_null() {
+                let next = unsafe { (*tail).next.load(Ordering::Relaxed) };
+                drop(unsafe { Box::from_raw(tail) });
+                tail = next;
+            }
+        }
+    }
+
+    pub fn make_queue<T>() -> Queue<T> {
+        let stub = make_node(None);
+        Queue {
+            head: AtomicPtr::new(stub),
+            tail: UnsafeCell::new(stub),
+        }
+    }
+
+    impl<T> Queue<T> {
+        pub fn push(&self, v: T) {
+            let node = make_node(Some(v));
+            // serialization-point wrt producers, acquire-release
+            let prev = self.head.swap(node, Ordering::AcqRel);
+            // serialization-point wrt consumer, release
+            unsafe { (*prev).next.store(node, Ordering::Release) };
+        }
+
+        /// # Safety
+        ///
+        /// This function must be called by a single consumer thread.
+        pub unsafe fn pop(&self) -> Option<T> {
+            let tail = *self.tail.get();
+
+            // serialization-point wrt producers, acquire
+            let next = (*tail).next.load(Ordering::Acquire);
+
+            if next.is_null() {
+                None
+            } else {
+                *self.tail.get() = next;
+                drop(Box::from_raw(tail));
+                Some((*next).value.take().unwrap())
+            }
+        }
+    }
+}
