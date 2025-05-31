@@ -136,7 +136,7 @@ impl<T> std::error::Error for SendError<T> {}
 
 /// Receive values from the associated [`UnboundedSender`].
 ///
-/// Instances are created by the [`unbounded_channel`] function.
+/// Instances are created by the [`unbounded`] function.
 pub struct UnboundedReceiver<T> {
     state: Arc<UnboundedState>,
     receiver: std::sync::mpsc::Receiver<T>,
@@ -160,7 +160,6 @@ impl<T> UnboundedReceiver<T> {
     ///
     /// [`Empty`]: TryRecvError::Empty
     /// [`Disconnected`]: TryRecvError::Disconnected
-    /// [`poll_recv`]: Self::poll_recv
     /// [senders]: UnboundedSender
     ///
     /// # Examples

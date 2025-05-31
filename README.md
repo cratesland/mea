@@ -30,6 +30,7 @@ Mea (Make Easy Async) is a runtime-agnostic library providing essential synchron
 * [**Semaphore**](https://docs.rs/mea/*/mea/semaphore/struct.Semaphore.html): A synchronization primitive that controls access to a shared resource.
 * [**ShutdownSend & ShutdownRecv**](https://docs.rs/mea/*/mea/shutdown/): A composite synchronization primitive for managing shutdown signals.
 * [**WaitGroup**](https://docs.rs/mea/*/mea/waitgroup/struct.WaitGroup.html): A synchronization primitive that allows waiting for multiple tasks to complete.
+* [**mpsc::unbounded**](https://docs.rs/mea/*/mea/mpsc/fn.unbounded.html): A multi-producer, single-consumer unbounded queue for sending values between asynchronous tasks.
 * [**oneshot::channel**](https://docs.rs/mea/*/mea/oneshot/index.html): A one-shot channel for sending a single value between tasks.
 
 ## Installation
