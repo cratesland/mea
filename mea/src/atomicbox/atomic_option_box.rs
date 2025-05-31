@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This module is derived from https://docs.rs/atomicbox/.
-
 use std::fmt;
 use std::marker::PhantomData;
 use std::mem;
@@ -57,6 +55,14 @@ unsafe fn from_ptr<T>(ptr: *mut T) -> Option<Box<T>> {
 
 impl<T> AtomicOptionBox<T> {
     /// Creates a new `AtomicOptionBox` with the given value.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use mea::atomicbox::AtomicOptionBox;
+    ///
+    /// let atomic_box = AtomicOptionBox::new(Some(Box::new(0)));
+    /// ```
     pub fn new(value: Option<Box<T>>) -> AtomicOptionBox<T> {
         AtomicOptionBox {
             ptr: AtomicPtr::new(into_ptr(value)),
@@ -67,6 +73,14 @@ impl<T> AtomicOptionBox<T> {
     /// Creates a new `AtomicOptionBox` with no value.
     ///
     /// Equivalent to `AtomicOptionBox::new(None)`, but can be used in `const` context.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use mea::atomicbox::AtomicOptionBox;
+    ///
+    /// static GLOBAL_BOX: AtomicOptionBox<u32> = AtomicOptionBox::none();
+    /// ```
     pub const fn none() -> Self {
         Self {
             ptr: AtomicPtr::new(ptr::null_mut()),
@@ -87,6 +101,18 @@ impl<T> AtomicOptionBox<T> {
     /// # Panics
     ///
     /// Panics if `order` is not one of the two allowed values.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use std::sync::atomic::Ordering;
+    ///
+    /// use mea::atomicbox::AtomicOptionBox;
+    ///
+    /// let atom = AtomicOptionBox::new(None);
+    /// let prev_value = atom.swap(Some(Box::new("ok")), Ordering::AcqRel);
+    /// assert_eq!(prev_value, None);
+    /// ```
     pub fn swap(&self, other: Option<Box<T>>, order: Ordering) -> Option<Box<T>> {
         match order {
             Ordering::AcqRel | Ordering::SeqCst => {}
@@ -109,6 +135,18 @@ impl<T> AtomicOptionBox<T> {
     /// # Panics
     ///
     /// Panics if `order` is not one of the two allowed values.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use std::sync::atomic::Ordering;
+    ///
+    /// use mea::atomicbox::AtomicOptionBox;
+    ///
+    /// let atom = AtomicOptionBox::new(None);
+    /// atom.store(Some(Box::new("ok")), Ordering::AcqRel);
+    /// assert_eq!(atom.into_inner(), Some(Box::new("ok")));
+    /// ```
     pub fn store(&self, other: Option<Box<T>>, order: Ordering) {
         self.swap(other, order);
     }
@@ -125,6 +163,20 @@ impl<T> AtomicOptionBox<T> {
     /// # Panics
     ///
     /// Panics if `order` is not one of the two allowed values.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use std::sync::atomic::Ordering;
+    ///
+    /// use mea::atomicbox::AtomicOptionBox;
+    ///
+    /// let atom = AtomicOptionBox::new(Some(Box::new("ok")));
+    /// let prev_value = atom.take(Ordering::AcqRel);
+    /// assert!(prev_value.is_some());
+    /// let prev_value = atom.take(Ordering::AcqRel);
+    /// assert!(prev_value.is_none());
+    /// ```
     pub fn take(&self, order: Ordering) -> Option<Box<T>> {
         self.swap(None, order)
     }
@@ -140,6 +192,19 @@ impl<T> AtomicOptionBox<T> {
     /// # Panics
     ///
     /// Panics if `order` is not one of the two allowed values.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use std::sync::atomic::Ordering;
+    ///
+    /// use mea::atomicbox::AtomicOptionBox;
+    ///
+    /// let atom = AtomicOptionBox::new(None);
+    /// let mut boxed = Some(Box::new("ok"));
+    /// let prev_value = atom.swap_mut(&mut boxed, Ordering::AcqRel);
+    /// assert_eq!(boxed, None);
+    /// ```
     pub fn swap_mut(&self, other: &mut Option<Box<T>>, order: Ordering) {
         let previous = self.swap(other.take(), order);
         *other = previous;
@@ -147,6 +212,15 @@ impl<T> AtomicOptionBox<T> {
 
     /// Consume this `AtomicOptionBox`, returning the last option value it
     /// contained.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use mea::atomicbox::AtomicOptionBox;
+    ///
+    /// let atom = AtomicOptionBox::new(Some(Box::new("hello")));
+    /// assert_eq!(atom.into_inner(), Some(Box::new("hello")));
+    /// ```
     pub fn into_inner(self) -> Option<Box<T>> {
         let ptr = self.ptr.load(Ordering::Acquire);
         mem::forget(self);

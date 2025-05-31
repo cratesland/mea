@@ -14,7 +14,6 @@
 
 //! A multi-producer, single-consumer queue for sending values between asynchronous tasks.
 
-use crate::internal::AtomicOptionBox;
 use std::fmt;
 use std::future::poll_fn;
 use std::sync::atomic::AtomicUsize;
@@ -23,6 +22,8 @@ use std::sync::Arc;
 use std::task::Context;
 use std::task::Poll;
 use std::task::Waker;
+
+use crate::atomicbox::AtomicOptionBox;
 
 #[cfg(test)]
 mod tests;

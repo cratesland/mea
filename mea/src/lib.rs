@@ -61,6 +61,7 @@
 
 pub(crate) mod internal;
 
+pub mod atomicbox;
 pub mod barrier;
 pub mod condvar;
 pub mod latch;
