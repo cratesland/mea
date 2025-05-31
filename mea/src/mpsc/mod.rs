@@ -90,7 +90,7 @@ impl<T> Drop for UnboundedSender<T> {
         match self.state.senders.fetch_sub(1, Ordering::AcqRel) {
             1 => {
                 // this is the last sender, we can disconnect the channel
-                self.state.disconnected.store(true, Ordering::Release);
+                self.state.disconnected.store(true, Ordering::Relaxed);
                 if let Some(waker) = self.state.rx_task.take(Ordering::Acquire) {
                     waker.wake();
                 }
@@ -112,7 +112,7 @@ impl<T> UnboundedSender<T> {
     /// If the receiver has been dropped, this function returns an error. The error includes
     /// the value passed to `send`.
     pub fn send(&self, value: T) -> Result<(), SendError<T>> {
-        if self.state.disconnected.load(Ordering::Acquire) {
+        if self.state.disconnected.load(Ordering::Relaxed) {
             return Err(SendError(value));
         }
 
@@ -175,7 +175,7 @@ impl<T> fmt::Debug for UnboundedReceiver<T> {
 
 impl<T> Drop for UnboundedReceiver<T> {
     fn drop(&mut self) {
-        self.state.disconnected.store(true, Ordering::Release);
+        self.state.disconnected.store(true, Ordering::Relaxed);
         self.state.rx_task.take(Ordering::Acquire);
     }
 }
@@ -219,7 +219,7 @@ impl<T> UnboundedReceiver<T> {
         match unsafe { self.state.mq.pop() } {
             Some(v) => Ok(v),
             None => {
-                if self.state.disconnected.load(Ordering::Acquire) {
+                if self.state.disconnected.load(Ordering::Relaxed) {
                     Err(TryRecvError::Disconnected)
                 } else {
                     Err(TryRecvError::Empty)
