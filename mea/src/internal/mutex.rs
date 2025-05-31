@@ -24,12 +24,19 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for Mutex<T> {
 }
 
 impl<T> Mutex<T> {
+    #[inline(always)]
     pub(crate) const fn new(t: T) -> Self {
         Self(std::sync::Mutex::new(t))
     }
 
+    #[inline(always)]
     pub(crate) fn lock(&self) -> std::sync::MutexGuard<'_, T> {
         self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    #[inline(always)]
+    pub(crate) fn get_mut(&mut self) -> &mut T {
+        self.0.get_mut().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
