@@ -86,6 +86,7 @@ mod tests {
     use crate::barrier::Barrier;
     use crate::condvar::Condvar;
     use crate::latch::Latch;
+    use crate::mpsc;
     use crate::mutex::Mutex;
     use crate::mutex::MutexGuard;
     use crate::oneshot;
@@ -115,6 +116,8 @@ mod tests {
         do_assert_send_and_sync::<RwLockWriteGuard<'_, i64>>();
         do_assert_send_and_sync::<oneshot::Sender<i64>>();
         do_assert_send_and_sync::<oneshot::SendError<i64>>();
+        do_assert_send_and_sync::<mpsc::UnboundedSender<i64>>();
+        do_assert_send_and_sync::<mpsc::SendError<i64>>();
     }
 
     #[test]
@@ -122,6 +125,7 @@ mod tests {
         fn do_assert_send<T: Send>() {}
         do_assert_send::<oneshot::Receiver<i64>>();
         do_assert_send::<oneshot::Recv<i64>>();
+        do_assert_send::<mpsc::UnboundedReceiver<i64>>();
     }
 
     #[test]
