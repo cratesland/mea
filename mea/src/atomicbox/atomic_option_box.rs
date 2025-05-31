@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// This is derived from https://github.com/jorendorff/atomicbox/blob/07756444/src/atomic_option_box.rs.
+
 use std::fmt;
 use std::marker::PhantomData;
 use std::mem;
@@ -248,7 +250,7 @@ impl<T> Drop for AtomicOptionBox<T> {
     /// Dropping an `AtomicOptionBox<T>` drops the final `Box<T>` value (if any) stored in it.
     fn drop(&mut self) {
         let last_ptr = self.ptr.load(Ordering::Acquire);
-        unsafe { from_ptr(last_ptr) };
+        unsafe { drop(from_ptr(last_ptr)) }
     }
 }
 

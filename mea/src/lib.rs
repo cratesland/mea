@@ -33,6 +33,7 @@
 //! * [`ShutdownSend`] & [`ShutdownRecv`]: A composite synchronization primitive for managing
 //!   shutdown signals
 //! * [`WaitGroup`]: A synchronization primitive that allows waiting for multiple tasks to complete
+//! * [`atomicbox`]: A safe, owning version of `AtomicPtr` for heap-allocated data.
 //! * [`mpsc::unbounded`]: A multi-producer, single-consumer unbounded queue for sending values
 //!   between asynchronous tasks.
 //! * [`oneshot::channel`]: A one-shot channel for sending a single value between tasks.
