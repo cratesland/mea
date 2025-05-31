@@ -159,12 +159,12 @@ impl<T> AtomicOptionBox<T> {
     /// This does not allocate or free memory, and it neither clones nor drops
     /// any values. It is equivalent to calling `self.swap(None, order)`
     ///
-    /// `order` must be either `Ordering::AcqRel` or `Ordering::SeqCst`,
+    /// `order` must be `Ordering::Acquire`, `Ordering::AcqRel`, or `Ordering::SeqCst`,
     /// as other values would not be safe if `T` contains any data.
     ///
     /// # Panics
     ///
-    /// Panics if `order` is not one of the two allowed values.
+    /// Panics if `order` is not one of the three allowed values.
     ///
     /// # Examples
     ///
@@ -180,7 +180,13 @@ impl<T> AtomicOptionBox<T> {
     /// assert!(prev_value.is_none());
     /// ```
     pub fn take(&self, order: Ordering) -> Option<Box<T>> {
-        self.swap(None, order)
+        match order {
+            Ordering::Acquire | Ordering::AcqRel | Ordering::SeqCst => {}
+            order => panic!("invalid ordering for atomic swap: {order:?}"),
+        }
+
+        let ptr = self.ptr.swap(ptr::null_mut(), order);
+        unsafe { from_ptr(ptr) }
     }
 
     /// Atomically swaps the contents of this `AtomicOptionBox` with the contents of `other`.
