@@ -155,10 +155,10 @@ impl<T> AtomicBox<T> {
     /// let atom = AtomicBox::new(Box::new("hello"));
     /// assert_eq!(atom.into_inner(), Box::new("hello"));
     /// ```
-    pub fn into_inner(self) -> Box<T> {
-        let last_ptr = self.ptr.load(Ordering::Acquire);
+    pub fn into_inner(mut self) -> Box<T> {
+        let result = unsafe { Box::from_raw(*self.ptr.get_mut()) };
         mem::forget(self);
-        unsafe { Box::from_raw(last_ptr) }
+        result
     }
 
     /// Returns a mutable reference to the contained value.
@@ -167,22 +167,14 @@ impl<T> AtomicBox<T> {
     /// that no other threads can concurrently access either the atomic pointer field
     /// or the boxed data it points to.
     pub fn get_mut(&mut self) -> &mut T {
-        // Relaxed suffices here because this thread must already have
-        // rendezvoused with any other thread that's been modifying shared
-        // data, and executed an Acquire barrier, in order for the caller to
-        // have a `mut` reference.  Symmetrically, no barrier is needed when
-        // the reference expires, because this thread must rendezvous with
-        // other threads, and execute a Release barrier, before this AtomicBox
-        // becomes shared again.
-        let ptr = self.ptr.load(Ordering::Relaxed);
-        unsafe { &mut *ptr }
+        unsafe { &mut **self.ptr.get_mut() }
     }
 }
 
 impl<T> Drop for AtomicBox<T> {
     /// Dropping an `AtomicBox<T>` drops the final `Box<T>` value stored in it.
     fn drop(&mut self) {
-        let ptr = self.ptr.load(Ordering::Acquire);
+        let ptr = *self.ptr.get_mut();
         unsafe { drop(Box::from_raw(ptr)) }
     }
 }
