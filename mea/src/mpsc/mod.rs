@@ -18,6 +18,7 @@ use std::fmt;
 use std::future::poll_fn;
 use std::ptr::null_mut;
 use std::sync::atomic::AtomicPtr;
+use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::task::Context;
@@ -38,12 +39,13 @@ mod tests;
 /// process to run out of memory. In this case, the process will be aborted.
 pub fn unbounded<T>() -> (UnboundedSender<T>, UnboundedReceiver<T>) {
     let state = Arc::new(UnboundedState {
+        senders: AtomicUsize::new(1),
         rx_task: AtomicPtr::new(null_mut()),
     });
     let (sender, receiver) = std::sync::mpsc::channel();
     let sender = UnboundedSender {
         state: state.clone(),
-        sender,
+        sender: Some(sender),
     };
     let receiver = UnboundedReceiver {
         state: state.clone(),
@@ -53,16 +55,26 @@ pub fn unbounded<T>() -> (UnboundedSender<T>, UnboundedReceiver<T>) {
 }
 
 struct UnboundedState {
+    senders: AtomicUsize,
     rx_task: AtomicPtr<Waker>,
 }
 
 /// Send values to the associated [`UnboundedReceiver`].
 ///
 /// Instances are created by the [`unbounded`] function.
-#[derive(Clone)]
 pub struct UnboundedSender<T> {
     state: Arc<UnboundedState>,
-    sender: std::sync::mpsc::Sender<T>,
+    sender: Option<std::sync::mpsc::Sender<T>>,
+}
+
+impl<T> Clone for UnboundedSender<T> {
+    fn clone(&self) -> Self {
+        self.state.senders.fetch_add(1, Ordering::Release);
+        UnboundedSender {
+            state: self.state.clone(),
+            sender: self.sender.clone(),
+        }
+    }
 }
 
 impl<T> fmt::Debug for UnboundedSender<T> {
@@ -73,10 +85,20 @@ impl<T> fmt::Debug for UnboundedSender<T> {
 
 impl<T> Drop for UnboundedSender<T> {
     fn drop(&mut self) {
-        // If the receiver has been dropped, wake up the task that is waiting for a message.
-        let waker = self.state.rx_task.swap(null_mut(), Ordering::AcqRel);
-        if !waker.is_null() {
-            unsafe { (*waker).wake_by_ref() }
+        drop(self.sender.take()); // drop the sender; this closes the channel if this is the last sender
+
+        match self.state.senders.fetch_sub(1, Ordering::AcqRel) {
+            1 => {
+                // If this is the last sender, we need to wake up the receiver
+                // so it can observe the disconnected state.
+                let waker = self.state.rx_task.swap(null_mut(), Ordering::AcqRel);
+                if !waker.is_null() {
+                    unsafe { (*waker).wake_by_ref() }
+                }
+            }
+            _ => {
+                // there are still other senders left, do nothing
+            }
         }
     }
 }
@@ -91,11 +113,15 @@ impl<T> UnboundedSender<T> {
     /// If the receiver has been dropped, this function returns an error. The error includes
     /// the value passed to `send`.
     pub fn send(&self, value: T) -> Result<(), SendError<T>> {
-        self.sender.send(value).map_err(|err| SendError(err.0))?;
+        // SAFETY: The sender is guaranteed to be non-null before dropped.
+        let sender = self.sender.as_ref().unwrap();
+        sender.send(value).map_err(|err| SendError(err.0))?;
+
         let waker = self.state.rx_task.swap(null_mut(), Ordering::AcqRel);
         if !waker.is_null() {
             unsafe { (*waker).wake_by_ref() }
         }
+
         Ok(())
     }
 }
