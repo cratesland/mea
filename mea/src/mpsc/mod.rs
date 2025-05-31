@@ -167,6 +167,9 @@ pub struct UnboundedReceiver<T> {
     receiver: std::sync::mpsc::Receiver<T>,
 }
 
+unsafe impl<T: Send> Send for UnboundedReceiver<T> {}
+unsafe impl<T: Send> Sync for UnboundedReceiver<T> {}
+
 impl<T> fmt::Debug for UnboundedReceiver<T> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("UnboundedReceiver")
