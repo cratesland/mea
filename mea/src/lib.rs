@@ -120,6 +120,7 @@ mod tests {
         do_assert_send_and_sync::<oneshot::SendError<i64>>();
         do_assert_send_and_sync::<mpsc::UnboundedSender<i64>>();
         do_assert_send_and_sync::<mpsc::SendError<i64>>();
+        do_assert_send_and_sync::<mpsc::UnboundedReceiver<i64>>();
     }
 
     #[test]
@@ -127,7 +128,6 @@ mod tests {
         fn do_assert_send<T: Send>() {}
         do_assert_send::<oneshot::Receiver<i64>>();
         do_assert_send::<oneshot::Recv<i64>>();
-        do_assert_send::<mpsc::UnboundedReceiver<i64>>();
     }
 
     #[test]
@@ -147,7 +147,11 @@ mod tests {
         do_assert_unpin::<RwLockReadGuard<'_, i64>>();
         do_assert_unpin::<RwLockWriteGuard<'_, i64>>();
         do_assert_unpin::<oneshot::Sender<i64>>();
+        do_assert_unpin::<oneshot::SendError<i64>>();
         do_assert_unpin::<oneshot::Receiver<i64>>();
         do_assert_unpin::<oneshot::Recv<i64>>();
+        do_assert_unpin::<mpsc::UnboundedSender<i64>>();
+        do_assert_unpin::<mpsc::SendError<i64>>();
+        do_assert_unpin::<mpsc::UnboundedReceiver<i64>>();
     }
 }

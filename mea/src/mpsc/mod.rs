@@ -167,6 +167,10 @@ pub struct UnboundedReceiver<T> {
     receiver: std::sync::mpsc::Receiver<T>,
 }
 
+/// The only `!Sync` field `receiver` is protected by `&mut self` in `recv` and `try_recv`.
+/// That is, `UnboundedReceiver` can only be accessed by one thread at a time.
+unsafe impl<T: Send> Sync for UnboundedReceiver<T> {}
+
 impl<T> fmt::Debug for UnboundedReceiver<T> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("UnboundedReceiver")
