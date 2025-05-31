@@ -270,17 +270,17 @@ impl<T> UnboundedReceiver<T> {
     }
 
     fn poll_recv(&mut self, cx: &mut Context<'_>) -> Poll<Option<T>> {
-        match self.receiver.try_recv() {
+        match self.try_recv() {
             Ok(v) => Poll::Ready(Some(v)),
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => Poll::Ready(None),
-            Err(std::sync::mpsc::TryRecvError::Empty) => {
+            Err(TryRecvError::Disconnected) => Poll::Ready(None),
+            Err(TryRecvError::Empty) => {
                 let waker = Some(Box::new(cx.waker().clone()));
                 self.state.rx_task.store(waker, Ordering::AcqRel);
 
-                match self.receiver.try_recv() {
+                match self.try_recv() {
                     Ok(v) => Poll::Ready(Some(v)),
-                    Err(std::sync::mpsc::TryRecvError::Disconnected) => Poll::Ready(None),
-                    Err(std::sync::mpsc::TryRecvError::Empty) => Poll::Pending,
+                    Err(TryRecvError::Disconnected) => Poll::Ready(None),
+                    Err(TryRecvError::Empty) => Poll::Pending,
                 }
             }
         }
