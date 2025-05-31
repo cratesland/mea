@@ -14,9 +14,9 @@
 
 //! A multi-producer, single-consumer queue for sending values between asynchronous tasks.
 
-use self::mpsc_queue::*;
 use std::fmt;
 use std::future::poll_fn;
+use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -24,6 +24,7 @@ use std::task::Context;
 use std::task::Poll;
 use std::task::Waker;
 
+use self::mpsc_queue::*;
 use crate::atomicbox::AtomicOptionBox;
 
 #[cfg(test)]
@@ -39,24 +40,26 @@ mod tests;
 /// the channel. Using an `unbounded` channel has the ability of causing the
 /// process to run out of memory. In this case, the process will be aborted.
 pub fn unbounded<T>() -> (UnboundedSender<T>, UnboundedReceiver<T>) {
+    let queue = make_queue();
     let state = Arc::new(UnboundedState {
+        mq: queue,
         senders: AtomicUsize::new(1),
+        disconnected: AtomicBool::new(false),
         rx_task: AtomicOptionBox::none(),
     });
-    let (sender, receiver) = std::sync::mpsc::channel();
     let sender = UnboundedSender {
         state: state.clone(),
-        sender: Some(sender),
     };
     let receiver = UnboundedReceiver {
         state: state.clone(),
-        receiver,
     };
     (sender, receiver)
 }
 
-struct UnboundedState {
+struct UnboundedState<T> {
+    mq: Queue<T>,
     senders: AtomicUsize,
+    disconnected: AtomicBool,
     rx_task: AtomicOptionBox<Waker>,
 }
 
@@ -64,8 +67,7 @@ struct UnboundedState {
 ///
 /// Instances are created by the [`unbounded`] function.
 pub struct UnboundedSender<T> {
-    state: Arc<UnboundedState>,
-    sender: Option<std::sync::mpsc::Sender<T>>,
+    state: Arc<UnboundedState<T>>,
 }
 
 impl<T> Clone for UnboundedSender<T> {
@@ -73,7 +75,6 @@ impl<T> Clone for UnboundedSender<T> {
         self.state.senders.fetch_add(1, Ordering::Release);
         UnboundedSender {
             state: self.state.clone(),
-            sender: self.sender.clone(),
         }
     }
 }
@@ -86,13 +87,10 @@ impl<T> fmt::Debug for UnboundedSender<T> {
 
 impl<T> Drop for UnboundedSender<T> {
     fn drop(&mut self) {
-        // drop the sender; this closes the channel if it is the last sender
-        drop(self.sender.take());
-
         match self.state.senders.fetch_sub(1, Ordering::AcqRel) {
             1 => {
-                // If this is the last sender, we need to wake up the receiver so it can
-                // observe the disconnected state.
+                // this is the last sender, we can disconnect the channel
+                self.state.disconnected.store(true, Ordering::Release);
                 if let Some(waker) = self.state.rx_task.take(Ordering::Acquire) {
                     waker.wake();
                 }
@@ -114,10 +112,11 @@ impl<T> UnboundedSender<T> {
     /// If the receiver has been dropped, this function returns an error. The error includes
     /// the value passed to `send`.
     pub fn send(&self, value: T) -> Result<(), SendError<T>> {
-        // SAFETY: The sender is guaranteed to be non-null before dropped.
-        let sender = self.sender.as_ref().unwrap();
-        sender.send(value).map_err(|err| SendError(err.0))?;
+        if self.state.disconnected.load(Ordering::Acquire) {
+            return Err(SendError(value));
+        }
 
+        self.state.mq.push(value);
         if let Some(waker) = self.state.rx_task.take(Ordering::Acquire) {
             waker.wake();
         }
@@ -164,14 +163,20 @@ impl<T> std::error::Error for SendError<T> {}
 ///
 /// Instances are created by the [`unbounded`] function.
 pub struct UnboundedReceiver<T> {
-    state: Arc<UnboundedState>,
-    receiver: std::sync::mpsc::Receiver<T>,
+    state: Arc<UnboundedState<T>>,
 }
 
 impl<T> fmt::Debug for UnboundedReceiver<T> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("UnboundedReceiver")
             .finish_non_exhaustive()
+    }
+}
+
+impl<T> Drop for UnboundedReceiver<T> {
+    fn drop(&mut self) {
+        self.state.disconnected.store(true, Ordering::Release);
+        self.state.rx_task.take(Ordering::Acquire);
     }
 }
 
@@ -210,10 +215,16 @@ impl<T> UnboundedReceiver<T> {
     /// # }
     /// ```
     pub fn try_recv(&mut self) -> Result<T, TryRecvError> {
-        match self.receiver.try_recv() {
-            Ok(v) => Ok(v),
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => Err(TryRecvError::Disconnected),
-            Err(std::sync::mpsc::TryRecvError::Empty) => Err(TryRecvError::Empty),
+        // SAFETY: &mut self indicates that we are the single consumer
+        match unsafe { self.state.mq.pop() } {
+            Some(v) => Ok(v),
+            None => {
+                if self.state.disconnected.load(Ordering::Acquire) {
+                    Err(TryRecvError::Disconnected)
+                } else {
+                    Err(TryRecvError::Empty)
+                }
+            }
         }
     }
 
@@ -312,7 +323,8 @@ impl std::error::Error for TryRecvError {}
 // http://www.1024cores.net/home/lock-free-algorithms/queues/non-intrusive-mpsc-node-based-queue
 mod mpsc_queue {
     use std::cell::UnsafeCell;
-    use std::sync::atomic::{AtomicPtr, Ordering};
+    use std::sync::atomic::AtomicPtr;
+    use std::sync::atomic::Ordering;
 
     struct Node<T> {
         next: AtomicPtr<Node<T>>,
