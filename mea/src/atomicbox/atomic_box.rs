@@ -14,9 +14,12 @@
 
 // This is derived from https://github.com/jorendorff/atomicbox/blob/07756444/src/atomic_box.rs.
 
+use std::fmt;
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicPtr, Ordering};
-use std::{fmt, mem, ptr};
+use std::mem;
+use std::ptr;
+use std::sync::atomic::AtomicPtr;
+use std::sync::atomic::Ordering;
 
 /// A type that holds a single `Box<T>` value and can be safely shared between threads.
 pub struct AtomicBox<T> {
@@ -40,9 +43,9 @@ impl<T> AtomicBox<T> {
     /// # Examples
     ///
     /// ```rust
-    ///     use mea::atomicbox::AtomicBox;
+    /// use mea::atomicbox::AtomicBox;
     ///
-    ///     let atomic_box = AtomicBox::new(Box::new(0));
+    /// let atomic_box = AtomicBox::new(Box::new(0));
     /// ```
     pub fn new(value: Box<T>) -> AtomicBox<T> {
         AtomicBox {
@@ -67,13 +70,14 @@ impl<T> AtomicBox<T> {
     /// # Examples
     ///
     /// ```rust
-    ///     use std::sync::atomic::Ordering;
-    ///     use mea::atomicbox::AtomicBox;
+    /// use std::sync::atomic::Ordering;
     ///
-    ///     let atom = AtomicBox::new(Box::new("one"));
-    ///     let prev_value = atom.swap(Box::new("two"), Ordering::AcqRel);
-    ///     assert_eq!(*prev_value, "one");
-    ///```
+    /// use mea::atomicbox::AtomicBox;
+    ///
+    /// let atom = AtomicBox::new(Box::new("one"));
+    /// let prev_value = atom.swap(Box::new("two"), Ordering::AcqRel);
+    /// assert_eq!(*prev_value, "one");
+    /// ```
     pub fn swap(&self, other: Box<T>, order: Ordering) -> Box<T> {
         let mut result = other;
         self.swap_mut(&mut result, order);
@@ -94,13 +98,14 @@ impl<T> AtomicBox<T> {
     /// # Examples
     ///
     /// ```rust
-    ///     use std::sync::atomic::Ordering;
-    ///     use mea::atomicbox::AtomicBox;
+    /// use std::sync::atomic::Ordering;
     ///
-    ///     let atom = AtomicBox::new(Box::new("one"));
-    ///     atom.store(Box::new("two"), Ordering::AcqRel);
-    ///     assert_eq!(atom.into_inner(), Box::new("two"));
-    ///```
+    /// use mea::atomicbox::AtomicBox;
+    ///
+    /// let atom = AtomicBox::new(Box::new("one"));
+    /// atom.store(Box::new("two"), Ordering::AcqRel);
+    /// assert_eq!(atom.into_inner(), Box::new("two"));
+    /// ```
     pub fn store(&self, other: Box<T>, order: Ordering) {
         self.swap(other, order);
     }
@@ -120,14 +125,15 @@ impl<T> AtomicBox<T> {
     /// # Examples
     ///
     /// ```rust
-    ///     use std::sync::atomic::Ordering;
-    ///     use mea::atomicbox::AtomicBox;
+    /// use std::sync::atomic::Ordering;
     ///
-    ///     let atom = AtomicBox::new(Box::new("one"));
-    ///     let mut boxed = Box::new("two");
-    ///     atom.swap_mut(&mut boxed, Ordering::AcqRel);
-    ///     assert_eq!(*boxed, "one");
-    ///```
+    /// use mea::atomicbox::AtomicBox;
+    ///
+    /// let atom = AtomicBox::new(Box::new("one"));
+    /// let mut boxed = Box::new("two");
+    /// atom.swap_mut(&mut boxed, Ordering::AcqRel);
+    /// assert_eq!(*boxed, "one");
+    /// ```
     pub fn swap_mut(&self, other: &mut Box<T>, order: Ordering) {
         match order {
             Ordering::AcqRel | Ordering::SeqCst => {}
@@ -144,11 +150,11 @@ impl<T> AtomicBox<T> {
     /// # Examples
     ///
     /// ```rust
-    ///     use mea::atomicbox::AtomicBox;
+    /// use mea::atomicbox::AtomicBox;
     ///
-    ///     let atom = AtomicBox::new(Box::new("hello"));
-    ///     assert_eq!(atom.into_inner(), Box::new("hello"));
-    ///```
+    /// let atom = AtomicBox::new(Box::new("hello"));
+    /// assert_eq!(atom.into_inner(), Box::new("hello"));
+    /// ```
     pub fn into_inner(self) -> Box<T> {
         let last_ptr = self.ptr.load(Ordering::Acquire);
         mem::forget(self);
@@ -206,8 +212,10 @@ impl<T> fmt::Debug for AtomicBox<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+    use std::sync::Barrier;
+
     use super::*;
-    use std::sync::{Arc, Barrier};
 
     #[test]
     fn atomic_box_swap_works() {
@@ -238,25 +246,26 @@ mod tests {
     #[test]
     fn atomic_box_pointer_identity() {
         let box1 = Box::new(1);
-        let p1 = format!("{:p}", box1);
+        let p1 = format!("{box1:p}");
         let atom = AtomicBox::new(box1);
 
         let box2 = Box::new(2);
-        let p2 = format!("{:p}", box2);
+        let p2 = format!("{box2:p}");
         assert!(p2 != p1);
 
         let box3 = atom.swap(box2, Ordering::AcqRel); // box1 out, box2 in
-        let p3 = format!("{:p}", box3);
+        let p3 = format!("{box3:p}");
         assert_eq!(p3, p1); // box3 is box1
 
         let box4 = atom.swap(Box::new(5), Ordering::AcqRel); // box2 out, throwaway value in
-        let p4 = format!("{:p}", box4);
+        let p4 = format!("{box4:p}");
         assert_eq!(p4, p2); // box4 is box2
     }
 
     #[test]
     fn atomic_box_drops() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::atomic::AtomicUsize;
+        use std::sync::atomic::Ordering;
         use std::sync::Arc;
 
         struct K(Arc<AtomicUsize>, usize);
@@ -314,7 +323,7 @@ mod tests {
             counts[val as usize] += 1;
         }
 
-        println!("{:?}", counts);
+        println!("{counts:?}");
         for count in counts {
             assert_eq!(count, 100);
         }
@@ -330,7 +339,7 @@ mod tests {
     #[test]
     fn debug_fmt() {
         let my_box = Box::new(32);
-        let expected = format!("AtomicBox({:p})", my_box);
+        let expected = format!("AtomicBox({my_box:p})");
         assert_eq!(format!("{:?}", AtomicBox::new(my_box)), expected);
     }
 }
