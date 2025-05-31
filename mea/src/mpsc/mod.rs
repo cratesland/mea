@@ -93,7 +93,7 @@ impl<T> Drop for UnboundedSender<T> {
                 // so it can observe the disconnected state.
                 let waker = self.state.rx_task.swap(null_mut(), Ordering::AcqRel);
                 if !waker.is_null() {
-                    unsafe { (*waker).wake_by_ref() }
+                    unsafe { Box::from_raw(waker).wake() }
                 }
             }
             _ => {
@@ -119,7 +119,7 @@ impl<T> UnboundedSender<T> {
 
         let waker = self.state.rx_task.swap(null_mut(), Ordering::AcqRel);
         if !waker.is_null() {
-            unsafe { (*waker).wake_by_ref() }
+            unsafe { Box::from_raw(waker).wake() }
         }
 
         Ok(())
