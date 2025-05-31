@@ -62,6 +62,7 @@ pub(crate) mod internal;
 pub mod barrier;
 pub mod condvar;
 pub mod latch;
+pub mod mpsc;
 pub mod mutex;
 pub mod oneshot;
 pub mod rwlock;
