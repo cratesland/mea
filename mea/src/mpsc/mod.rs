@@ -14,10 +14,9 @@
 
 //! A multi-producer, single-consumer queue for sending values between asynchronous tasks.
 
+use crate::internal::AtomicOptionBox;
 use std::fmt;
 use std::future::poll_fn;
-use std::ptr::null_mut;
-use std::sync::atomic::AtomicPtr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -40,7 +39,7 @@ mod tests;
 pub fn unbounded<T>() -> (UnboundedSender<T>, UnboundedReceiver<T>) {
     let state = Arc::new(UnboundedState {
         senders: AtomicUsize::new(1),
-        rx_task: AtomicPtr::new(null_mut()),
+        rx_task: AtomicOptionBox::none(),
     });
     let (sender, receiver) = std::sync::mpsc::channel();
     let sender = UnboundedSender {
@@ -56,7 +55,7 @@ pub fn unbounded<T>() -> (UnboundedSender<T>, UnboundedReceiver<T>) {
 
 struct UnboundedState {
     senders: AtomicUsize,
-    rx_task: AtomicPtr<Waker>,
+    rx_task: AtomicOptionBox<Waker>,
 }
 
 /// Send values to the associated [`UnboundedReceiver`].
@@ -85,15 +84,15 @@ impl<T> fmt::Debug for UnboundedSender<T> {
 
 impl<T> Drop for UnboundedSender<T> {
     fn drop(&mut self) {
-        drop(self.sender.take()); // drop the sender; this closes the channel if this is the last sender
+        // drop the sender; this closes the channel if it is the last sender
+        drop(self.sender.take());
 
         match self.state.senders.fetch_sub(1, Ordering::AcqRel) {
             1 => {
-                // If this is the last sender, we need to wake up the receiver
-                // so it can observe the disconnected state.
-                let waker = self.state.rx_task.swap(null_mut(), Ordering::AcqRel);
-                if !waker.is_null() {
-                    unsafe { Box::from_raw(waker).wake() }
+                // If this is the last sender, we need to wake up the receiver so it can
+                // observe the disconnected state.
+                if let Some(waker) = self.state.rx_task.swap(None, Ordering::AcqRel) {
+                    waker.wake();
                 }
             }
             _ => {
@@ -117,9 +116,8 @@ impl<T> UnboundedSender<T> {
         let sender = self.sender.as_ref().unwrap();
         sender.send(value).map_err(|err| SendError(err.0))?;
 
-        let waker = self.state.rx_task.swap(null_mut(), Ordering::AcqRel);
-        if !waker.is_null() {
-            unsafe { Box::from_raw(waker).wake() }
+        if let Some(waker) = self.state.rx_task.swap(None, Ordering::AcqRel) {
+            waker.wake();
         }
 
         Ok(())
@@ -275,8 +273,8 @@ impl<T> UnboundedReceiver<T> {
             Ok(v) => Poll::Ready(Some(v)),
             Err(std::sync::mpsc::TryRecvError::Disconnected) => Poll::Ready(None),
             Err(std::sync::mpsc::TryRecvError::Empty) => {
-                let waker = Box::into_raw(Box::new(cx.waker().clone()));
-                self.state.rx_task.store(waker, Ordering::Release);
+                let waker = Some(Box::new(cx.waker().clone()));
+                self.state.rx_task.store(waker, Ordering::AcqRel);
 
                 match self.receiver.try_recv() {
                     Ok(v) => Poll::Ready(Some(v)),
