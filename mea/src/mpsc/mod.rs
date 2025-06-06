@@ -14,8 +14,13 @@
 
 //! A multi-producer, single-consumer queue for sending values between asynchronous tasks.
 
+mod error;
 #[cfg(test)]
 mod tests;
 mod unbounded;
 
-pub use unbounded::{unbounded, SendError, TryRecvError, UnboundedReceiver, UnboundedSender};
+pub use error::SendError;
+pub use error::TryRecvError;
+pub use unbounded::unbounded;
+pub use unbounded::UnboundedReceiver;
+pub use unbounded::UnboundedSender;
