@@ -32,7 +32,7 @@ impl<T> SendError<T> {
     pub fn into_inner(self) -> T {
         self.0
     }
-    
+
     /// Creates a new `SendError` with the given message.
     pub(super) fn new(msg: T) -> SendError<T> {
         SendError(msg)
