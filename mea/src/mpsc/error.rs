@@ -14,12 +14,14 @@
 
 use std::fmt;
 
-/// An error returned when trying to send on a closed channel. Returned from
-/// [`UnboundedSender::send`] if the corresponding [`UnboundedReceiver`] has
-/// already been dropped.
+/// An error returned when trying to send on a closed channel.
+///
+/// Returned from [`UnboundedSender::send`] and [`BoundedSender::send`] if the corresponding
+/// [`UnboundedReceiver`] has already been dropped.
 ///
 /// The message that could not be sent can be retrieved again with
 /// [`SendError::into_inner`].
+#[derive(PartialEq)]
 pub struct SendError<T>(T);
 
 impl<T> SendError<T> {
@@ -52,6 +54,64 @@ impl<T> fmt::Debug for SendError<T> {
 }
 
 impl<T> std::error::Error for SendError<T> {}
+
+/// Error returned by `try_send`.
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub enum TrySendError<T> {
+    /// The channel is full, so data may not be sent at this time, but the receiver has not yet
+    /// disconnected.
+    Full(T),
+    /// The receiver has become disconnected, and there will never be any more data sent on it.
+    Disconnected(T),
+}
+
+impl<T> TrySendError<T> {
+    /// Gets a reference to the message that failed to be sent.
+    pub fn as_inner(&self) -> &T {
+        match self {
+            TrySendError::Full(msg) | TrySendError::Disconnected(msg) => msg,
+        }
+    }
+
+    /// Consumes the error and returns the message that failed to be sent.
+    pub fn into_inner(self) -> T {
+        match self {
+            TrySendError::Full(msg) | TrySendError::Disconnected(msg) => msg,
+        }
+    }
+
+    /// Creates a new `TrySendError::Full` with the given message.
+    pub(super) fn new_full(msg: T) -> TrySendError<T> {
+        TrySendError::Full(msg)
+    }
+
+    /// Creates a new `TrySendError::Disconnected` with the given message.
+    pub(super) fn new_disconnected(msg: T) -> TrySendError<T> {
+        TrySendError::Disconnected(msg)
+    }
+}
+
+impl<T> fmt::Display for TrySendError<T> {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TrySendError::Full(_) => "sending on a full channel".fmt(fmt),
+            TrySendError::Disconnected(_) => "sending on a closed channel".fmt(fmt),
+        }
+    }
+}
+
+impl<T> fmt::Debug for TrySendError<T> {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TrySendError::Full(_) => write!(fmt, "TrySendError<{}>::Full(..)", stringify!(T)),
+            TrySendError::Disconnected(_) => {
+                write!(fmt, "TrySendError<{}>::Disconnected(..)", stringify!(T))
+            }
+        }
+    }
+}
+
+impl<T> std::error::Error for TrySendError<T> {}
 
 /// Error returned by `try_recv`.
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
