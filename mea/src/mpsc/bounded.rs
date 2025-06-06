@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! An unbounded multi-producer, single-consumer queue for sending values between asynchronous
-//! tasks.
+//! A bounded multi-producer, single-consumer queue for sending values between asynchronous
+//! tasks with backpressure control.
 
 use std::fmt;
 use std::future::poll_fn;
@@ -25,65 +25,68 @@ use std::task::Poll;
 use std::task::Waker;
 
 use crate::atomicbox::AtomicOptionBox;
+use crate::mpsc::error::TrySendError;
 use crate::mpsc::SendError;
 use crate::mpsc::TryRecvError;
+use crate::semaphore::Semaphore;
 
-/// Creates an unbounded mpsc channel for communicating between asynchronous
-/// tasks without backpressure.
+/// Creates a bounded mpsc channel for communicating between asynchronous
+/// tasks with backpressure.
 ///
-/// A `send` on this channel will always succeed as long as the receiver is alive.
-/// If the receiver falls behind, messages will be arbitrarily buffered.
-///
-/// Note that the amount of available system memory is an implicit bound to
-/// the channel. Using an `unbounded` channel has the ability of causing the
-/// process to run out of memory. In this case, the process will be aborted.
-pub fn unbounded<T>() -> (UnboundedSender<T>, UnboundedReceiver<T>) {
-    let state = Arc::new(UnboundedState {
+/// A `send` on this channel will wait if the buffer of the channel is full until a
+/// `recv` is called on the receiver, which will consume the message and
+/// free up space in the buffer.
+#[track_caller]
+pub fn bounded<T>(buffer: usize) -> (BoundedSender<T>, BoundedReceiver<T>) {
+    assert!(buffer > 0, "mpsc bounded channel requires buffer > 0");
+    let state = Arc::new(BoundedState {
         senders: AtomicUsize::new(1),
+        tx_permits: Semaphore::new(buffer),
         rx_task: AtomicOptionBox::none(),
     });
     let (sender, receiver) = std::sync::mpsc::channel();
-    let sender = UnboundedSender {
+    let sender = BoundedSender {
         state: state.clone(),
         sender: Some(sender),
     };
-    let receiver = UnboundedReceiver {
+    let receiver = BoundedReceiver {
         state: state.clone(),
-        receiver,
+        receiver: Some(receiver),
     };
     (sender, receiver)
 }
 
-struct UnboundedState {
+struct BoundedState {
     senders: AtomicUsize,
+    tx_permits: Semaphore,
     rx_task: AtomicOptionBox<Waker>,
 }
 
-/// Send values to the associated [`UnboundedReceiver`].
+/// Send values to the associated [`BoundedReceiver`].
 ///
-/// Instances are created by the [`unbounded`] function.
-pub struct UnboundedSender<T> {
-    state: Arc<UnboundedState>,
+/// Instances are created by the [`bounded`] function.
+pub struct BoundedSender<T> {
+    state: Arc<BoundedState>,
     sender: Option<std::sync::mpsc::Sender<T>>,
 }
 
-impl<T> Clone for UnboundedSender<T> {
+impl<T> Clone for BoundedSender<T> {
     fn clone(&self) -> Self {
         self.state.senders.fetch_add(1, Ordering::Release);
-        UnboundedSender {
+        BoundedSender {
             state: self.state.clone(),
             sender: self.sender.clone(),
         }
     }
 }
 
-impl<T> fmt::Debug for UnboundedSender<T> {
+impl<T> fmt::Debug for BoundedSender<T> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.debug_struct("UnboundedSender").finish_non_exhaustive()
+        fmt.debug_struct("BoundedSender").finish_non_exhaustive()
     }
 }
 
-impl<T> Drop for UnboundedSender<T> {
+impl<T> Drop for BoundedSender<T> {
     fn drop(&mut self) {
         // drop the sender; this closes the channel if it is the last sender
         drop(self.sender.take());
@@ -103,19 +106,68 @@ impl<T> Drop for UnboundedSender<T> {
     }
 }
 
-impl<T> UnboundedSender<T> {
-    /// Attempts to send a message without blocking.
+impl<T> BoundedSender<T> {
+    /// Attempts to send a message to the associated receiver.
     ///
-    /// This method is not marked async because sending a message to an unbounded channel
-    /// never requires any form of waiting. Because of this, the `send` method can be
-    /// used in both synchronous and asynchronous code without problems.
+    /// This method will wait if the buffer of the channel is full until a `recv` is called on the
+    /// receiver, which will consume the message and free up space in the buffer.
     ///
     /// If the receiver has been dropped, this function returns an error. The error includes
     /// the value passed to `send`.
-    pub fn send(&self, value: T) -> Result<(), SendError<T>> {
+    pub async fn send(&self, value: T) -> Result<(), SendError<T>> {
+        let permit = self.state.tx_permits.acquire(1).await;
+
         // SAFETY: The sender is guaranteed to be non-null before dropped.
         let sender = self.sender.as_ref().unwrap();
         sender.send(value).map_err(|err| SendError::new(err.0))?;
+        permit.forget();
+
+        if let Some(waker) = self.state.rx_task.take(Ordering::Acquire) {
+            waker.wake();
+        }
+
+        Ok(())
+    }
+
+    /// Attempts to send a message to the associated receiver without waiting.
+    ///
+    /// This method returns the [`Full`] error if the buffer of the channel is full.
+    ///
+    /// This method returns the [`Disconnected`] error if the channel is currently empty, and there
+    /// are no outstanding [receivers].
+    ///
+    /// [`Full`]: TrySendError::Full
+    /// [`Disconnected`]: TrySendError::Disconnected
+    /// [receivers]: BoundedReceiver
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use mea::mpsc::bounded;
+    /// use mea::mpsc::TrySendError;
+    /// let (tx, mut rx) = bounded::<i32>(1);
+    ///
+    /// tx.try_send(1).unwrap();
+    /// assert_eq!(tx.try_send(2), Err(TrySendError::Full(2)));
+    ///
+    /// drop(rx);
+    /// assert_eq!(tx.try_send(3), Err(TrySendError::Disconnected(3)));
+    /// # }
+    /// ```
+    pub fn try_send(&self, value: T) -> Result<(), TrySendError<T>> {
+        let permit = match self.state.tx_permits.try_acquire(1) {
+            Some(permit) => permit,
+            None => return Err(TrySendError::new_full(value)),
+        };
+
+        // SAFETY: The sender is guaranteed to be non-null before dropped.
+        let sender = self.sender.as_ref().unwrap();
+        sender
+            .send(value)
+            .map_err(|err| TrySendError::new_disconnected(err.0))?;
+        permit.forget();
 
         if let Some(waker) = self.state.rx_task.take(Ordering::Acquire) {
             waker.wake();
@@ -125,27 +177,34 @@ impl<T> UnboundedSender<T> {
     }
 }
 
-/// Receive values from the associated [`UnboundedSender`].
+/// Receives values from the associated [`BoundedSender`].
 ///
-/// Instances are created by the [`unbounded`] function.
-pub struct UnboundedReceiver<T> {
-    state: Arc<UnboundedState>,
-    receiver: std::sync::mpsc::Receiver<T>,
+/// Instances are created by the [`bounded`] function.
+pub struct BoundedReceiver<T> {
+    state: Arc<BoundedState>,
+    receiver: Option<std::sync::mpsc::Receiver<T>>,
 }
 
 /// The only `!Sync` field `receiver` is protected by `&mut self` in `recv` and `try_recv`.
-/// That is, `UnboundedReceiver` can only be accessed by one thread at a time.
-unsafe impl<T: Send> Sync for UnboundedReceiver<T> {}
+/// That is, `BoundedReceiver` can only be accessed by one thread at a time.
+unsafe impl<T: Send> Sync for BoundedReceiver<T> {}
 
-impl<T> fmt::Debug for UnboundedReceiver<T> {
+impl<T> fmt::Debug for BoundedReceiver<T> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.debug_struct("UnboundedReceiver")
-            .finish_non_exhaustive()
+        fmt.debug_struct("BoundedReceiver").finish_non_exhaustive()
     }
 }
 
-impl<T> UnboundedReceiver<T> {
-    /// Tries to receive the next value for this receiver.
+impl<T> Drop for BoundedReceiver<T> {
+    fn drop(&mut self) {
+        drop(self.receiver.take());
+        self.state.tx_permits.release(u32::MAX as usize);
+    }
+}
+
+impl<T> BoundedReceiver<T> {
+    /// Tries to receive the next value for this receiver and frees up a space in the buffer if
+    /// successful.
     ///
     /// This method returns the [`Empty`] error if the channel is currently
     /// empty, but there are still outstanding [senders].
@@ -155,7 +214,7 @@ impl<T> UnboundedReceiver<T> {
     ///
     /// [`Empty`]: TryRecvError::Empty
     /// [`Disconnected`]: TryRecvError::Disconnected
-    /// [senders]: UnboundedSender
+    /// [senders]: BoundedSender
     ///
     /// # Examples
     ///
@@ -164,14 +223,14 @@ impl<T> UnboundedReceiver<T> {
     /// # async fn main() {
     /// use mea::mpsc;
     /// use mea::mpsc::TryRecvError;
-    /// let (tx, mut rx) = mpsc::unbounded();
+    /// let (tx, mut rx) = mpsc::bounded(2);
     ///
-    /// tx.send("hello").unwrap();
+    /// tx.send("hello").await.unwrap();
     ///
     /// assert_eq!(Ok("hello"), rx.try_recv());
     /// assert_eq!(Err(TryRecvError::Empty), rx.try_recv());
     ///
-    /// tx.send("hello").unwrap();
+    /// tx.send("hello").await.unwrap();
     /// drop(tx);
     ///
     /// assert_eq!(Ok("hello"), rx.try_recv());
@@ -179,14 +238,19 @@ impl<T> UnboundedReceiver<T> {
     /// # }
     /// ```
     pub fn try_recv(&mut self) -> Result<T, TryRecvError> {
-        match self.receiver.try_recv() {
-            Ok(v) => Ok(v),
+        // SAFETY: The receiver is guaranteed to be non-null before dropped.
+        let receiver = self.receiver.as_ref().unwrap();
+        match receiver.try_recv() {
+            Ok(v) => {
+                self.state.tx_permits.release(1);
+                Ok(v)
+            }
             Err(std::sync::mpsc::TryRecvError::Disconnected) => Err(TryRecvError::Disconnected),
             Err(std::sync::mpsc::TryRecvError::Empty) => Err(TryRecvError::Empty),
         }
     }
 
-    /// Receives the next value for this receiver.
+    /// Receives the next value for this receiver and frees up a space in the buffer if successful.
     ///
     /// This method returns `None` if the channel has been closed and there are
     /// no remaining messages in the channel's buffer. This indicates that no
@@ -209,10 +273,10 @@ impl<T> UnboundedReceiver<T> {
     /// # #[tokio::main]
     /// # async fn main() {
     /// use mea::mpsc;
-    /// let (tx, mut rx) = mpsc::unbounded();
+    /// let (tx, mut rx) = mpsc::bounded(1);
     ///
     /// tokio::spawn(async move {
-    ///     tx.send("hello").unwrap();
+    ///     tx.send("hello").await.unwrap();
     /// });
     ///
     /// assert_eq!(Some("hello"), rx.recv().await);
@@ -220,16 +284,16 @@ impl<T> UnboundedReceiver<T> {
     /// # }
     /// ```
     ///
-    /// Values are buffered:
+    /// Values are buffered if the channel has enough capacity:
     ///
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
     /// use mea::mpsc;
-    /// let (tx, mut rx) = mpsc::unbounded();
+    /// let (tx, mut rx) = mpsc::bounded(2);
     ///
-    /// tx.send("hello").unwrap();
-    /// tx.send("world").unwrap();
+    /// tx.send("hello").await.unwrap();
+    /// tx.send("world").await.unwrap();
     ///
     /// assert_eq!(Some("hello"), rx.recv().await);
     /// assert_eq!(Some("world"), rx.recv().await);

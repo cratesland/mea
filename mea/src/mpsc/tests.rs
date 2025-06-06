@@ -18,10 +18,11 @@ use tokio_test::assert_ok;
 
 use crate::mpsc;
 use crate::mpsc::TryRecvError;
+use crate::mpsc::TrySendError;
 use crate::test_runtime;
 
 #[test]
-fn test_pressure() {
+fn test_unbounded_pressure() {
     let n = 1024 * 1024;
     let (tx, mut rx) = mpsc::unbounded();
 
@@ -65,6 +66,8 @@ fn test_unbounded_sum() {
 async fn select_streams() {
     let (tx1, mut rx1) = mpsc::unbounded::<i32>();
     let (tx2, mut rx2) = mpsc::unbounded::<i32>();
+    let (tx3, mut rx3) = mpsc::bounded(1);
+    let (tx4, mut rx4) = mpsc::bounded(1);
 
     tokio::spawn(async move {
         assert_ok!(tx2.send(1));
@@ -74,6 +77,15 @@ async fn select_streams() {
         tokio::task::yield_now().await;
 
         assert_ok!(tx2.send(3));
+        tokio::task::yield_now().await;
+
+        assert_ok!(tx3.send(4).await);
+        tokio::task::yield_now().await;
+
+        assert_ok!(tx4.send(5).await);
+        tokio::task::yield_now().await;
+
+        assert_ok!(tx3.send(6).await);
         tokio::task::yield_now().await;
 
         drop((tx1, tx2));
@@ -90,6 +102,12 @@ async fn select_streams() {
             Some(y) = rx2.recv() => {
                 msgs.push(y);
             }
+            Some(z) = rx3.recv() => {
+                msgs.push(z);
+            }
+            Some(w) = rx4.recv() => {
+                msgs.push(w);
+            }
             else => {
                 rem = false;
             }
@@ -97,7 +115,7 @@ async fn select_streams() {
     }
 
     msgs.sort_unstable();
-    assert_eq!(&msgs[..], &[1, 2, 3]);
+    assert_eq!(&msgs[..], &[1, 2, 3, 4, 5, 6]);
 }
 
 #[tokio::test]
@@ -156,4 +174,82 @@ fn try_recv_close_while_empty_unbounded() {
     assert_eq!(Err(TryRecvError::Empty), rx.try_recv());
     drop(tx);
     assert_eq!(Err(TryRecvError::Disconnected), rx.try_recv());
+}
+
+#[tokio::test]
+async fn send_recv_bounded() {
+    let (tx, mut rx) = mpsc::bounded(1);
+
+    tx.send(1).await.unwrap();
+    assert_eq!(rx.recv().await, Some(1));
+
+    drop(tx);
+    assert_eq!(rx.recv().await, None);
+}
+
+#[tokio::test]
+async fn async_send_recv_bounded() {
+    let (tx, mut rx) = mpsc::bounded(1);
+
+    tx.send(1).await.unwrap();
+    // This will block until the receiver is ready to receive.
+    tokio::spawn(async move {
+        tx.send(2).await.unwrap();
+    });
+
+    assert_eq!(Some(1), rx.recv().await);
+    assert_eq!(Some(2), rx.recv().await);
+    assert_eq!(None, rx.recv().await);
+}
+
+#[test]
+fn try_send_recv_bounded() {
+    for num in 1..101 {
+        let (tx, mut rx) = mpsc::bounded(num);
+
+        for i in 0..num {
+            tx.try_send(i).unwrap();
+        }
+
+        assert_eq!(tx.try_send(num), Err(TrySendError::new_full(num)));
+
+        for i in 0..num {
+            assert_eq!(rx.try_recv(), Ok(i));
+        }
+
+        assert_eq!(rx.try_recv(), Err(TryRecvError::Empty));
+        drop(tx);
+        assert_eq!(rx.try_recv(), Err(TryRecvError::Disconnected));
+    }
+}
+
+#[tokio::test]
+async fn send_after_close_bounded() {
+    let (tx, mut rx) = mpsc::bounded(1);
+
+    tx.send(1).await.unwrap();
+    assert_eq!(rx.recv().await, Some(1));
+
+    drop(rx);
+    assert_eq!(tx.send(2).await, Err(mpsc::SendError::new(2)));
+}
+
+#[test]
+fn test_bounded_pressure() {
+    let n = 1024 * 1024;
+    let (tx, mut rx) = mpsc::bounded(1024);
+
+    test_runtime().block_on(async move {
+        let start = Instant::now();
+        tokio::spawn(async move {
+            for i in 0..n {
+                tx.send(i).await.unwrap();
+            }
+        });
+
+        for i in 0..n {
+            assert_eq!(rx.recv().await, Some(i));
+        }
+        println!("Elapsed: {:?}", start.elapsed());
+    });
 }
