@@ -211,7 +211,7 @@ fn try_send_recv_bounded() {
             tx.try_send(i).unwrap();
         }
 
-        assert_eq!(tx.try_send(num), Err(TrySendError::new_full(num)));
+        assert_eq!(tx.try_send(num), Err(TrySendError::Full(num)));
 
         for i in 0..num {
             assert_eq!(rx.try_recv(), Ok(i));
@@ -221,6 +221,16 @@ fn try_send_recv_bounded() {
         drop(tx);
         assert_eq!(rx.try_recv(), Err(TryRecvError::Disconnected));
     }
+}
+
+#[tokio::test]
+async fn try_send_after_close_bounded() {
+    let (tx, rx) = mpsc::bounded(1);
+
+    tx.try_send(1).unwrap();
+    drop(rx);
+
+    assert_eq!(tx.try_send(3), Err(TrySendError::Disconnected(3)));
 }
 
 #[tokio::test]

@@ -17,7 +17,6 @@
 
 use std::fmt;
 use std::future::poll_fn;
-use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -42,11 +41,10 @@ pub fn bounded<T>(buffer: usize) -> (BoundedSender<T>, BoundedReceiver<T>) {
     assert!(buffer > 0, "mpsc bounded channel requires buffer > 0");
     let state = Arc::new(BoundedState {
         senders: AtomicUsize::new(1),
-        is_close: AtomicBool::new(false),
-        tx_permits: Semaphore::new(buffer),
+        tx_permits: Semaphore::new(0),
         rx_task: AtomicOptionBox::none(),
     });
-    let (sender, receiver) = std::sync::mpsc::channel();
+    let (sender, receiver) = std::sync::mpsc::sync_channel(buffer);
     let sender = BoundedSender {
         state: state.clone(),
         sender: Some(sender),
@@ -60,7 +58,6 @@ pub fn bounded<T>(buffer: usize) -> (BoundedSender<T>, BoundedReceiver<T>) {
 
 struct BoundedState {
     senders: AtomicUsize,
-    is_close: AtomicBool,
     tx_permits: Semaphore,
     rx_task: AtomicOptionBox<Waker>,
 }
@@ -70,7 +67,7 @@ struct BoundedState {
 /// Instances are created by the [`bounded`] function.
 pub struct BoundedSender<T> {
     state: Arc<BoundedState>,
-    sender: Option<std::sync::mpsc::Sender<T>>,
+    sender: Option<std::sync::mpsc::SyncSender<T>>,
 }
 
 impl<T> Clone for BoundedSender<T> {
@@ -118,26 +115,26 @@ impl<T> BoundedSender<T> {
     /// If the receiver has been dropped, this function returns an error. The error includes
     /// the value passed to `send`.
     pub async fn send(&self, value: T) -> Result<(), SendError<T>> {
-        if self.state.is_close.load(Ordering::Acquire) {
-            return Err(SendError::new(value));
-        }
-        self.state.tx_permits.acquire(1).await;
+        let mut value = match self.try_send(value) {
+            Ok(()) => return Ok(()),
+            Err(TrySendError::Disconnected(value)) => return Err(SendError::new(value)),
+            Err(TrySendError::Full(value)) => value,
+        };
 
-        // SAFETY: The sender is guaranteed to be non-null before dropped.
-        let sender = self.sender.as_ref().unwrap();
-        match sender.send(value) {
-            Ok(()) => {}
-            Err(err) => {
-                self.state.tx_permits.release(1);
-                return Err(SendError::new(err.0));
+        loop {
+            self.state.tx_permits.acquire(1).await;
+            value = match self.try_send(value) {
+                Ok(()) => {
+                    self.state.tx_permits.release_if_nonempty(1);
+                    return Ok(());
+                }
+                Err(TrySendError::Disconnected(value)) => {
+                    self.state.tx_permits.notify_all();
+                    return Err(SendError::new(value));
+                }
+                Err(TrySendError::Full(value)) => value,
             }
         }
-
-        if let Some(waker) = self.state.rx_task.take(Ordering::Acquire) {
-            waker.wake();
-        }
-
-        Ok(())
     }
 
     /// Attempts to send a message to the associated receiver without waiting.
@@ -168,29 +165,21 @@ impl<T> BoundedSender<T> {
     /// # }
     /// ```
     pub fn try_send(&self, value: T) -> Result<(), TrySendError<T>> {
-        if self.state.is_close.load(Ordering::Acquire) {
-            return Err(TrySendError::new_disconnected(value));
-        }
-        match self.state.tx_permits.try_acquire(1) {
-            true => {}
-            false => return Err(TrySendError::new_full(value)),
-        };
-
         // SAFETY: The sender is guaranteed to be non-null before dropped.
         let sender = self.sender.as_ref().unwrap();
-        match sender.send(value) {
-            Ok(()) => {}
-            Err(err) => {
-                self.state.tx_permits.release(1);
-                return Err(TrySendError::new_disconnected(err.0));
+        match sender.try_send(value) {
+            Ok(()) => {
+                if let Some(waker) = self.state.rx_task.take(Ordering::Acquire) {
+                    waker.wake();
+                }
+
+                Ok(())
+            }
+            Err(std::sync::mpsc::TrySendError::Full(value)) => Err(TrySendError::Full(value)),
+            Err(std::sync::mpsc::TrySendError::Disconnected(value)) => {
+                Err(TrySendError::Disconnected(value))
             }
         }
-
-        if let Some(waker) = self.state.rx_task.take(Ordering::Acquire) {
-            waker.wake();
-        }
-
-        Ok(())
     }
 }
 
@@ -215,7 +204,6 @@ impl<T> fmt::Debug for BoundedReceiver<T> {
 impl<T> Drop for BoundedReceiver<T> {
     fn drop(&mut self) {
         drop(self.receiver.take());
-        self.state.is_close.store(true, Ordering::Release);
         self.state.tx_permits.notify_all();
     }
 }
@@ -260,7 +248,7 @@ impl<T> BoundedReceiver<T> {
         let receiver = self.receiver.as_ref().unwrap();
         match receiver.try_recv() {
             Ok(v) => {
-                self.state.tx_permits.release(1);
+                self.state.tx_permits.release_if_nonempty(1);
                 Ok(v)
             }
             Err(std::sync::mpsc::TryRecvError::Disconnected) => Err(TryRecvError::Disconnected),

@@ -79,16 +79,6 @@ impl<T> TrySendError<T> {
             TrySendError::Full(msg) | TrySendError::Disconnected(msg) => msg,
         }
     }
-
-    /// Creates a new `TrySendError::Full` with the given message.
-    pub(super) fn new_full(msg: T) -> TrySendError<T> {
-        TrySendError::Full(msg)
-    }
-
-    /// Creates a new `TrySendError::Disconnected` with the given message.
-    pub(super) fn new_disconnected(msg: T) -> TrySendError<T> {
-        TrySendError::Disconnected(msg)
-    }
 }
 
 impl<T> fmt::Display for TrySendError<T> {
