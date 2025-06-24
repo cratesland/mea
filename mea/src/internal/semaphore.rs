@@ -114,10 +114,28 @@ impl Semaphore {
         fut.await
     }
 
-    /// Adds `n` new permits to the semaphore.
+    /// Returns a future that is resolved when acquired `n` permits from the semaphore.
+    pub(crate) fn poll_acquire(&self, n: usize) -> Acquire<'_> {
+        Acquire {
+            permits: n,
+            index: None,
+            semaphore: self,
+            done: false,
+        }
+    }
+
+    /// Adds `n` permits to the semaphore.
     pub(crate) fn release(&self, n: usize) {
         if n != 0 {
             self.insert_permits_with_lock(n, self.waiters.lock());
+        }
+    }
+
+    /// Adds `n` permits to the semaphore if there is any waiter.
+    pub(crate) fn release_if_nonempty(&self, n: usize) {
+        let waiters = self.waiters.lock();
+        if !waiters.is_empty() {
+            self.insert_permits_with_lock(n, waiters);
         }
     }
 

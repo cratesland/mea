@@ -15,15 +15,6 @@
 //! An unbounded multi-producer, single-consumer queue for sending values between asynchronous
 //! tasks.
 
-/// Creates an unbounded mpsc channel for communicating between asynchronous
-/// tasks without backpressure.
-///
-/// A `send` on this channel will always succeed as long as the receiver is alive.
-/// If the receiver falls behind, messages will be arbitrarily buffered.
-///
-/// Note that the amount of available system memory is an implicit bound to
-/// the channel. Using an `unbounded` channel has the ability of causing the
-/// process to run out of memory. In this case, the process will be aborted.
 use std::fmt;
 use std::future::poll_fn;
 use std::sync::atomic::AtomicUsize;
