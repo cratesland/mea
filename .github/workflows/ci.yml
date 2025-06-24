@@ -36,6 +36,7 @@ jobs:
   check:
     name: Check
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain
@@ -51,10 +52,12 @@ jobs:
   test:
     name: Run tests
     strategy:
+      fail-fast: false
       matrix:
         os: [ ubuntu-22.04, macos-14, windows-2022 ]
         rust-version: [ "1.80.0", "stable" ]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
