@@ -141,13 +141,9 @@ impl<T> BoundedSender<T> {
                     let poll = pin!(&mut self.acquire).poll(cx);
 
                     value = match self.sender.try_send(value) {
-                        Ok(()) => {
-                            self.sender.state.tx_permits.release_if_nonempty(1);
-                            return Poll::Ready(Ok(()));
-                        }
+                        Ok(()) => return Poll::Ready(Ok(())),
                         Err(TrySendError::Disconnected(value)) => {
-                            self.sender.state.tx_permits.notify_all();
-                            return Poll::Ready(Err(SendError::new(value)));
+                            return Poll::Ready(Err(SendError::new(value)))
                         }
                         Err(TrySendError::Full(value)) => value,
                     };

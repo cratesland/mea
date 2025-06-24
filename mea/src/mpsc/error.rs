@@ -21,7 +21,7 @@ use std::fmt;
 ///
 /// The message that could not be sent can be retrieved again with
 /// [`SendError::into_inner`].
-#[derive(PartialEq)]
+#[derive(Eq, PartialEq)]
 pub struct SendError<T>(T);
 
 impl<T> SendError<T> {
@@ -56,7 +56,7 @@ impl<T> fmt::Debug for SendError<T> {
 impl<T> std::error::Error for SendError<T> {}
 
 /// Error returned by `try_send`.
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(Eq, PartialEq)]
 pub enum TrySendError<T> {
     /// The channel is full, so data may not be sent at this time, but the receiver has not yet
     /// disconnected.
