@@ -17,6 +17,8 @@
 
 use std::fmt;
 use std::future::poll_fn;
+use std::future::Future;
+use std::pin::pin;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -25,6 +27,7 @@ use std::task::Poll;
 use std::task::Waker;
 
 use crate::atomicbox::AtomicOptionBox;
+use crate::internal::Acquire;
 use crate::internal::Semaphore;
 use crate::mpsc::error::TrySendError;
 use crate::mpsc::SendError;
@@ -115,26 +118,57 @@ impl<T> BoundedSender<T> {
     /// If the receiver has been dropped, this function returns an error. The error includes
     /// the value passed to `send`.
     pub async fn send(&self, value: T) -> Result<(), SendError<T>> {
-        let mut value = match self.try_send(value) {
+        let value = match self.try_send(value) {
             Ok(()) => return Ok(()),
             Err(TrySendError::Disconnected(value)) => return Err(SendError::new(value)),
             Err(TrySendError::Full(value)) => value,
         };
 
-        loop {
-            self.state.tx_permits.acquire(1).await;
-            value = match self.try_send(value) {
-                Ok(()) => {
-                    self.state.tx_permits.release_if_nonempty(1);
-                    return Ok(());
+        struct SendState<'a, T> {
+            sender: &'a BoundedSender<T>,
+            value: Option<T>,
+            acquire: Acquire<'a>,
+        }
+
+        impl<'a, T> SendState<'a, T> {
+            fn poll_send(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), SendError<T>>> {
+                let mut value = match self.value.take() {
+                    Some(value) => value,
+                    None => return Poll::Ready(Ok(())),
+                };
+
+                loop {
+                    let poll = pin!(&mut self.acquire).poll(cx);
+
+                    value = match self.sender.try_send(value) {
+                        Ok(()) => {
+                            self.sender.state.tx_permits.release_if_nonempty(1);
+                            return Poll::Ready(Ok(()));
+                        }
+                        Err(TrySendError::Disconnected(value)) => {
+                            self.sender.state.tx_permits.notify_all();
+                            return Poll::Ready(Err(SendError::new(value)));
+                        }
+                        Err(TrySendError::Full(value)) => value,
+                    };
+
+                    if poll.is_ready() {
+                        self.acquire = self.sender.state.tx_permits.poll_acquire(1);
+                    } else {
+                        self.value = Some(value);
+                        return Poll::Pending;
+                    }
                 }
-                Err(TrySendError::Disconnected(value)) => {
-                    self.state.tx_permits.notify_all();
-                    return Err(SendError::new(value));
-                }
-                Err(TrySendError::Full(value)) => value,
             }
         }
+
+        let acquire = self.state.tx_permits.poll_acquire(1);
+        let mut send = SendState {
+            sender: self,
+            value: Some(value),
+            acquire,
+        };
+        poll_fn(|cx| send.poll_send(cx)).await
     }
 
     /// Attempts to send a message to the associated receiver without waiting.

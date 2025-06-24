@@ -114,6 +114,16 @@ impl Semaphore {
         fut.await
     }
 
+    /// Returns a future that is resolved when acquired `n` permits from the semaphore.
+    pub(crate) fn poll_acquire(&self, n: usize) -> Acquire<'_> {
+        Acquire {
+            permits: n,
+            index: None,
+            semaphore: self,
+            done: false,
+        }
+    }
+
     /// Adds `n` permits to the semaphore.
     pub(crate) fn release(&self, n: usize) {
         if n != 0 {
