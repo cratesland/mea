@@ -34,6 +34,8 @@
 //!   shutdown signals
 //! * [`WaitGroup`]: A synchronization primitive that allows waiting for multiple tasks to complete
 //! * [`atomicbox`]: A safe, owning version of `AtomicPtr` for heap-allocated data.
+//! * [`mpsc::bounded`]: A multi-producer, single-consumer bounded queue for sending values between
+//!   asynchronous tasks.
 //! * [`mpsc::unbounded`]: A multi-producer, single-consumer unbounded queue for sending values
 //!   between asynchronous tasks.
 //! * [`oneshot::channel`]: A one-shot channel for sending a single value between tasks.
@@ -116,11 +118,13 @@ mod tests {
         do_assert_send_and_sync::<RwLock<i64>>();
         do_assert_send_and_sync::<RwLockReadGuard<'_, i64>>();
         do_assert_send_and_sync::<RwLockWriteGuard<'_, i64>>();
-        do_assert_send_and_sync::<oneshot::Sender<i64>>();
         do_assert_send_and_sync::<oneshot::SendError<i64>>();
-        do_assert_send_and_sync::<mpsc::UnboundedSender<i64>>();
+        do_assert_send_and_sync::<oneshot::Sender<i64>>();
         do_assert_send_and_sync::<mpsc::SendError<i64>>();
+        do_assert_send_and_sync::<mpsc::UnboundedSender<i64>>();
         do_assert_send_and_sync::<mpsc::UnboundedReceiver<i64>>();
+        do_assert_send_and_sync::<mpsc::BoundedSender<i64>>();
+        do_assert_send_and_sync::<mpsc::BoundedReceiver<i64>>();
     }
 
     #[test]
@@ -150,8 +154,10 @@ mod tests {
         do_assert_unpin::<oneshot::SendError<i64>>();
         do_assert_unpin::<oneshot::Receiver<i64>>();
         do_assert_unpin::<oneshot::Recv<i64>>();
-        do_assert_unpin::<mpsc::UnboundedSender<i64>>();
         do_assert_unpin::<mpsc::SendError<i64>>();
+        do_assert_unpin::<mpsc::UnboundedSender<i64>>();
         do_assert_unpin::<mpsc::UnboundedReceiver<i64>>();
+        do_assert_unpin::<mpsc::BoundedSender<i64>>();
+        do_assert_unpin::<mpsc::BoundedReceiver<i64>>();
     }
 }
