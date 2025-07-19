@@ -56,8 +56,11 @@
 
 use std::cell::UnsafeCell;
 use std::fmt;
+use std::marker::PhantomData;
+use std::mem::ManuallyDrop;
 use std::ops::Deref;
 use std::ops::DerefMut;
+use std::ptr::NonNull;
 use std::sync::Arc;
 
 use crate::internal;
@@ -365,5 +368,80 @@ impl<T: ?Sized> Deref for OwnedMutexGuard<T> {
 impl<T: ?Sized> DerefMut for OwnedMutexGuard<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *self.lock.c.get() }
+    }
+}
+
+///
+pub struct MappedMutexGuard<'a, T: ?Sized> {
+    d: NonNull<T>,
+    s: &'a internal::Semaphore,
+    variance: PhantomData<&'a mut T>,
+}
+
+impl<'a, T: ?Sized> MappedMutexGuard<'a, T> {
+    ///
+    pub fn map<U, F>(mut orig: Self, f: F) -> MappedMutexGuard<'a, U>
+    where
+        F: FnOnce(&mut T) -> &mut U,
+        U: ?Sized,
+    {
+        let d = NonNull::from(f(unsafe { orig.d.as_mut() }));
+        let orig = ManuallyDrop::new(orig);
+        MappedMutexGuard {
+            d,
+            s: orig.s,
+            variance: PhantomData,
+        }
+    }
+
+    ///
+    pub fn try_map<U, F>(mut orig: Self, f: F) -> Result<MappedMutexGuard<'a, U>, Self>
+    where
+        F: FnOnce(&mut T) -> Option<&mut U>,
+        U: ?Sized,
+    {
+        match f(unsafe { orig.d.as_mut() }) {
+            Some(d) => {
+                let d = NonNull::from(d);
+                let orig = ManuallyDrop::new(orig);
+                Ok(MappedMutexGuard {
+                    d,
+                    s: orig.s,
+                    variance: PhantomData,
+                })
+            }
+            None => Err(orig),
+        }
+    }
+}
+
+impl<T: ?Sized> Drop for MappedMutexGuard<'_, T> {
+    fn drop(&mut self) {
+        self.s.release(1);
+    }
+}
+
+impl<T: ?Sized + fmt::Debug> fmt::Debug for MappedMutexGuard<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&**self, f)
+    }
+}
+
+impl<T: ?Sized + fmt::Display> fmt::Display for MappedMutexGuard<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&**self, f)
+    }
+}
+
+impl<T: ?Sized> Deref for MappedMutexGuard<'_, T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        unsafe { self.d.as_ref() }
+    }
+}
+
+impl<T: ?Sized> DerefMut for MappedMutexGuard<'_, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { self.d.as_mut() }
     }
 }
