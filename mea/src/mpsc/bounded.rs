@@ -98,7 +98,7 @@ impl<T> Drop for BoundedSender<T> {
             1 => {
                 // If this is the last sender, we need to wake up the receiver so it can
                 // observe the disconnected state.
-                if let Some(waker) = self.state.rx_task.take(Ordering::Acquire) {
+                if let Some(waker) = self.state.rx_task.take() {
                     waker.wake();
                 }
             }
@@ -130,7 +130,7 @@ impl<T> BoundedSender<T> {
             acquire: Acquire<'a>,
         }
 
-        impl<'a, T> SendState<'a, T> {
+        impl<T> SendState<'_, T> {
             fn poll_send(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), SendError<T>>> {
                 let mut value = match self.value.take() {
                     Some(value) => value,
@@ -199,7 +199,7 @@ impl<T> BoundedSender<T> {
         let sender = self.sender.as_ref().unwrap();
         match sender.try_send(value) {
             Ok(()) => {
-                if let Some(waker) = self.state.rx_task.take(Ordering::Acquire) {
+                if let Some(waker) = self.state.rx_task.take() {
                     waker.wake();
                 }
 
@@ -345,7 +345,7 @@ impl<T> BoundedReceiver<T> {
             Err(TryRecvError::Disconnected) => Poll::Ready(None),
             Err(TryRecvError::Empty) => {
                 let waker = Some(Box::new(cx.waker().clone()));
-                self.state.rx_task.store(waker, Ordering::AcqRel);
+                self.state.rx_task.store(waker);
 
                 match self.try_recv() {
                     Ok(v) => Poll::Ready(Some(v)),

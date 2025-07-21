@@ -60,27 +60,18 @@ impl<T> AtomicBox<T> {
     /// any values.  `other` is moved into `self`; the value previously in
     /// `self` is returned.
     ///
-    /// `order` must be either `Ordering::AcqRel` or `Ordering::SeqCst`,
-    /// as other values would not be safe if `T` contains any data.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `order` is not one of the two allowed values.
-    ///
     /// # Examples
     ///
     /// ```rust
-    /// use std::sync::atomic::Ordering;
-    ///
     /// use mea::atomicbox::AtomicBox;
     ///
     /// let atom = AtomicBox::new(Box::new("one"));
-    /// let prev_value = atom.swap(Box::new("two"), Ordering::AcqRel);
+    /// let prev_value = atom.swap(Box::new("two"));
     /// assert_eq!(*prev_value, "one");
     /// ```
-    pub fn swap(&self, other: Box<T>, order: Ordering) -> Box<T> {
+    pub fn swap(&self, other: Box<T>) -> Box<T> {
         let mut result = other;
-        self.swap_mut(&mut result, order);
+        self.swap_mut(&mut result);
         result
     }
 
@@ -88,26 +79,17 @@ impl<T> AtomicBox<T> {
     ///
     /// The `AtomicBox` takes ownership of `other`.
     ///
-    /// `order` must be either `Ordering::AcqRel` or `Ordering::SeqCst`,
-    /// as other values would not be safe if `T` contains any data.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `order` is not one of the two allowed values.
-    ///
     /// # Examples
     ///
     /// ```rust
-    /// use std::sync::atomic::Ordering;
-    ///
     /// use mea::atomicbox::AtomicBox;
     ///
     /// let atom = AtomicBox::new(Box::new("one"));
-    /// atom.store(Box::new("two"), Ordering::AcqRel);
+    /// atom.store(Box::new("two"));
     /// assert_eq!(atom.into_inner(), Box::new("two"));
     /// ```
-    pub fn store(&self, other: Box<T>, order: Ordering) {
-        self.swap(other, order);
+    pub fn store(&self, other: Box<T>) {
+        self.swap(other);
     }
 
     /// Atomically swaps the contents of this `AtomicBox` with the contents of `other`.
@@ -115,33 +97,19 @@ impl<T> AtomicBox<T> {
     /// This does not allocate or free memory, and it neither clones nor drops
     /// any values. The pointers in `*other` and `self` are simply exchanged.
     ///
-    /// `order` must be either `Ordering::AcqRel` or `Ordering::SeqCst`,
-    /// as other values would not be safe if `T` contains any data.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `order` is not one of the two allowed values.
-    ///
     /// # Examples
     ///
     /// ```rust
-    /// use std::sync::atomic::Ordering;
-    ///
     /// use mea::atomicbox::AtomicBox;
     ///
     /// let atom = AtomicBox::new(Box::new("one"));
     /// let mut boxed = Box::new("two");
-    /// atom.swap_mut(&mut boxed, Ordering::AcqRel);
+    /// atom.swap_mut(&mut boxed);
     /// assert_eq!(*boxed, "one");
     /// ```
-    pub fn swap_mut(&self, other: &mut Box<T>, order: Ordering) {
-        match order {
-            Ordering::AcqRel | Ordering::SeqCst => {}
-            _ => panic!("invalid ordering for atomic swap"),
-        }
-
+    pub fn swap_mut(&self, other: &mut Box<T>) {
         let other_ptr = Box::into_raw(unsafe { ptr::read(other) });
-        let ptr = self.ptr.swap(other_ptr, order);
+        let ptr = self.ptr.swap(other_ptr, Ordering::AcqRel);
         unsafe { ptr::write(other, Box::from_raw(ptr)) };
     }
 
@@ -213,15 +181,15 @@ mod tests {
     fn atomic_box_swap_works() {
         let b = AtomicBox::new(Box::new("hello world"));
         let bis = Box::new("bis");
-        assert_eq!(b.swap(bis, Ordering::AcqRel), Box::new("hello world"));
-        assert_eq!(b.swap(Box::new(""), Ordering::AcqRel), Box::new("bis"));
+        assert_eq!(b.swap(bis), Box::new("hello world"));
+        assert_eq!(b.swap(Box::new("")), Box::new("bis"));
     }
 
     #[test]
     fn atomic_box_store_works() {
         let b = AtomicBox::new(Box::new("hello world"));
         let bis = Box::new("bis");
-        b.store(bis, Ordering::AcqRel);
+        b.store(bis);
         assert_eq!(b.into_inner(), Box::new("bis"));
     }
 
@@ -229,9 +197,9 @@ mod tests {
     fn atomic_box_swap_mut_works() {
         let b = AtomicBox::new(Box::new("hello world"));
         let mut bis = Box::new("bis");
-        b.swap_mut(&mut bis, Ordering::AcqRel);
+        b.swap_mut(&mut bis);
         assert_eq!(bis, Box::new("hello world"));
-        b.swap_mut(&mut bis, Ordering::AcqRel);
+        b.swap_mut(&mut bis);
         assert_eq!(bis, Box::new("bis"));
     }
 
@@ -243,13 +211,13 @@ mod tests {
 
         let box2 = Box::new(2);
         let p2 = format!("{box2:p}");
-        assert!(p2 != p1);
+        assert_ne!(p2, p1);
 
-        let box3 = atom.swap(box2, Ordering::AcqRel); // box1 out, box2 in
+        let box3 = atom.swap(box2); // box1 out, box2 in
         let p3 = format!("{box3:p}");
         assert_eq!(p3, p1); // box3 is box1
 
-        let box4 = atom.swap(Box::new(5), Ordering::AcqRel); // box2 out, throwaway value in
+        let box4 = atom.swap(Box::new(5)); // box2 out, throwaway value in
         let p4 = format!("{box4:p}");
         assert_eq!(p4, p2); // box4 is box2
     }
@@ -272,7 +240,7 @@ mod tests {
         {
             let ab = AtomicBox::new(Box::new(K(n.clone(), 5)));
             assert_eq!(n.load(Ordering::Relaxed), 0);
-            let first = ab.swap(Box::new(K(n.clone(), 13)), Ordering::AcqRel);
+            let first = ab.swap(Box::new(K(n.clone(), 13)));
             assert_eq!(n.load(Ordering::Relaxed), 0);
             drop(first);
             assert_eq!(n.load(Ordering::Relaxed), 5);
@@ -294,7 +262,7 @@ mod tests {
                     my_gate.wait();
                     let mut my_vec = Box::new(vec![]);
                     for _ in 0..100 {
-                        my_vec = my_box.swap(my_vec, Ordering::AcqRel);
+                        my_vec = my_box.swap(my_vec);
                         my_vec.push(t);
                     }
                     my_vec
@@ -311,7 +279,7 @@ mod tests {
 
         // Don't forget the data still in `abox`!
         // There are NTHREADS+1 vectors in all.
-        for val in *abox.swap(Box::new(vec![]), Ordering::AcqRel) {
+        for val in *abox.swap(Box::new(vec![])) {
             counts[val as usize] += 1;
         }
 
@@ -319,13 +287,6 @@ mod tests {
         for count in counts {
             assert_eq!(count, 100);
         }
-    }
-
-    #[test]
-    #[should_panic(expected = "invalid ordering for atomic swap")]
-    fn cant_use_foolish_swap_ordering_type() {
-        let atom = AtomicBox::new(Box::new(0));
-        atom.swap(Box::new(44), Ordering::Release); // nope
     }
 
     #[test]
