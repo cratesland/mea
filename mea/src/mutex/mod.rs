@@ -56,11 +56,17 @@
 
 use std::cell::UnsafeCell;
 use std::fmt;
+use std::marker::PhantomData;
+use std::mem::ManuallyDrop;
 use std::ops::Deref;
 use std::ops::DerefMut;
+use std::ptr::NonNull;
 use std::sync::Arc;
 
 use crate::internal;
+
+#[cfg(test)]
+mod test;
 
 /// An async mutex for protecting shared data.
 ///
@@ -314,6 +320,98 @@ impl<T: ?Sized> DerefMut for MutexGuard<'_, T> {
     }
 }
 
+impl<'a, T: ?Sized> MutexGuard<'a, T> {
+    /// Makes a new [`MappedMutexGuard`] for a component of the locked data.
+    ///
+    /// This operation cannot fail as the `MutexGuard` passed in already locked the mutex.
+    ///
+    /// This is an associated function that needs to be used as `MutexGuard::map(...)`. A method
+    /// would interfere with methods of the same name on the contents of the locked data.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use mea::mutex::{Mutex, MutexGuard};
+    ///
+    /// #[derive(Debug, Clone)]
+    /// struct Foo(String);
+    ///
+    /// let mutex = Mutex::new(Foo("hello".to_owned()));
+    ///
+    /// let guard = mutex.lock().await;
+    /// let mapped_guard = MutexGuard::map(guard, |f| &mut f.0);
+    ///
+    /// assert_eq!(&*mapped_guard, "hello");
+    /// # }
+    /// ```
+    pub fn map<U, F>(mut orig: Self, f: F) -> MappedMutexGuard<'a, U>
+    where
+        F: FnOnce(&mut T) -> &mut U,
+        U: ?Sized,
+    {
+        let d = NonNull::from(f(&mut *orig));
+        let orig = ManuallyDrop::new(orig);
+        MappedMutexGuard {
+            d,
+            s: &orig.lock.s,
+            variance: PhantomData,
+        }
+    }
+
+    /// Attempts to make a new [`MappedMutexGuard`] for a component of the locked data. The
+    /// original guard is returned if the closure returns `None`.
+    ///
+    /// This operation cannot fail as the `MutexGuard` passed in already locked the mutex.
+    ///
+    /// This is an associated function that needs to be used as `MutexGuard::try_map(...)`. A
+    /// method would interfere with methods of the same name on the contents of the locked data.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use mea::mutex::{Mutex, MutexGuard};
+    ///
+    /// #[derive(Debug, Clone)]
+    /// struct Foo(String);
+    ///
+    /// let mutex = Mutex::new(Foo("hello".to_owned()));
+    ///
+    /// let guard = mutex.lock().await;
+    /// let mapped_guard = MutexGuard::try_map(guard, |f| {
+    ///     if f.0.len() > 3 {
+    ///         Some(&mut f.0)
+    ///     } else {
+    ///         None
+    ///     }
+    /// }).expect("should have mapped");
+    ///
+    /// assert_eq!(&*mapped_guard, "hello");
+    /// # }
+    /// ```
+    pub fn try_map<U, F>(mut orig: Self, f: F) -> Result<MappedMutexGuard<'a, U>, Self>
+    where
+        F: FnOnce(&mut T) -> Option<&mut U>,
+        U: ?Sized,
+    {
+        match f(&mut *orig) {
+            Some(d) => {
+                let d = NonNull::from(d);
+                let orig = ManuallyDrop::new(orig);
+                Ok(MappedMutexGuard {
+                    d,
+                    s: &orig.lock.s,
+                    variance: PhantomData,
+                })
+            }
+            None => Err(orig),
+        }
+    }
+}
+
 /// An owned handle to a held `Mutex`.
 ///
 /// This guard is only available from a [`Mutex`] that is wrapped in an [`Arc`]. It is identical to
@@ -365,5 +463,211 @@ impl<T: ?Sized> Deref for OwnedMutexGuard<T> {
 impl<T: ?Sized> DerefMut for OwnedMutexGuard<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *self.lock.c.get() }
+    }
+}
+
+
+/// RAII structure used to release the exclusive lock on a mutex when dropped, for a mapped component of the locked data.
+///
+/// This structure is created by the [`map`] and [`try_map`] methods on [`MutexGuard`]. It allows you to 
+/// hold a lock on a subfield of the protected data, enabling more fine-grained access control while 
+/// maintaining the same locking semantics.
+///
+/// As long as you have this guard, you have exclusive access to the underlying `T`. The guard 
+/// internally keeps a reference to the original mutex's semaphore, so the original lock is 
+/// maintained until this guard is dropped.
+///
+/// `MappedMutexGuard` implements [`Send`] and [`Sync`]
+/// when the underlying data type supports these traits, allowing it to be used across task
+/// boundaries and shared between threads safely.
+///
+/// [`map`]: MutexGuard::map
+/// [`try_map`]: MutexGuard::try_map
+///
+/// # Examples
+///
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// use mea::mutex::{Mutex, MutexGuard};
+///
+/// #[derive(Debug)]
+/// struct Foo {
+///     a: u32,
+///     b: String,
+/// }
+///
+/// let mutex = Mutex::new(Foo {
+///     a: 1,
+///     b: "hello".to_owned(),
+/// });
+///
+/// let guard = mutex.lock().await;
+/// let mapped_guard = MutexGuard::map(guard, |foo| &mut foo.a);
+/// 
+/// // Now we can only access the `a` field
+/// assert_eq!(*mapped_guard, 1);
+/// # }
+/// ```
+#[must_use = "if unused the Mutex will immediately unlock"]
+pub struct MappedMutexGuard<'a, T: ?Sized> {
+    d: NonNull<T>,
+    s: &'a internal::Semaphore,
+    variance: PhantomData<&'a mut T>,
+}
+
+// SAFETY: MappedMutexGuard can be safely shared between threads (Sync) when T: Sync.
+// Through &MappedMutexGuard, you can only get &T, so if T itself allows sharing references
+// across threads, then sharing MappedMutexGuard references is also safe.
+unsafe impl<T: ?Sized + Sync> Sync for MappedMutexGuard<'_, T> {}
+
+// SAFETY: MappedMutexGuard can be safely sent between threads when T: Send.
+// The guard holds exclusive access to the data protected by the mutex lock,
+// and the NonNull<T> pointer remains valid for the guard's lifetime.
+// This is essential for async tasks that may be moved between threads at .await points.
+unsafe impl<T: ?Sized + Send> Send for MappedMutexGuard<'_, T> {}
+
+impl<'a, T: ?Sized> MappedMutexGuard<'a, T> {
+    /// Makes a new [`MappedMutexGuard`] for a component of the locked data.
+    ///
+    /// This operation cannot fail as the `MappedMutexGuard` passed in already locked the mutex.
+    ///
+    /// This is an associated function that needs to be used as `MappedMutexGuard::map(...)`. A
+    /// method would interfere with methods of the same name on the contents of the locked data.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use mea::mutex::{Mutex, MutexGuard, MappedMutexGuard};
+    ///
+    /// #[derive(Debug)]
+    /// struct Foo {
+    ///     a: u32,
+    ///     b: String,
+    /// }
+    ///
+    /// let mutex = Mutex::new(Foo {
+    ///     a: 1,
+    ///     b: "hello".to_owned(),
+    /// });
+    ///
+    /// let guard = mutex.lock().await;
+    /// let mapped_guard = MutexGuard::map(guard, |foo| &mut foo.b);
+    /// let nested_mapped_guard = MappedMutexGuard::map(mapped_guard, |s| s.as_mut_str());
+    ///
+    /// assert_eq!(&*nested_mapped_guard, "hello");
+    /// # }
+    /// ```
+    pub fn map<U, F>(mut orig: Self, f: F) -> MappedMutexGuard<'a, U>
+    where
+        F: FnOnce(&mut T) -> &mut U,
+        U: ?Sized,
+    {
+        // SAFETY: orig.d is a valid NonNull<T> pointer that was created from a valid reference
+        // when the original MappedMutexGuard was constructed. The guard guarantees exclusive
+        // access to the data through the mutex lock, so dereferencing as mutable is safe.
+        let d = NonNull::from(f(unsafe { orig.d.as_mut() }));
+        let orig = ManuallyDrop::new(orig);
+        MappedMutexGuard {
+            d,
+            s: orig.s,
+            variance: PhantomData,
+        }
+    }
+
+    /// Attempts to make a new [`MappedMutexGuard`] for a component of the locked data. The
+    /// original guard is returned if the closure returns `None`.
+    ///
+    /// This operation cannot fail as the `MappedMutexGuard` passed in already locked the mutex.
+    ///
+    /// This is an associated function that needs to be used as `MappedMutexGuard::try_map(...)`. A
+    /// method would interfere with methods of the same name on the contents of the locked data.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use mea::mutex::{Mutex, MutexGuard, MappedMutexGuard};
+    ///
+    /// #[derive(Debug)]
+    /// struct Foo {
+    ///     a: u32,
+    ///     b: String,
+    /// }
+    ///
+    /// let mutex = Mutex::new(Foo {
+    ///     a: 1,
+    ///     b: "hello".to_owned(),
+    /// });
+    ///
+    /// let guard = mutex.lock().await;
+    /// let mapped_guard = MutexGuard::map(guard, |foo| &mut foo.b);
+    /// let nested_mapped_guard = MappedMutexGuard::try_map(mapped_guard, |s| {
+    ///     if s.len() > 3 {
+    ///         Some(s.as_mut_str())
+    ///     } else {
+    ///         None
+    ///     }
+    /// }).expect("should have mapped");
+    ///
+    /// assert_eq!(&*nested_mapped_guard, "hello");
+    /// # }
+    /// ```
+    pub fn try_map<U, F>(mut orig: Self, f: F) -> Result<MappedMutexGuard<'a, U>, Self>
+    where
+        F: FnOnce(&mut T) -> Option<&mut U>,
+        U: ?Sized,
+    {
+        // SAFETY: orig.d is a valid NonNull<T> pointer that was created from a valid reference
+        // when the original MappedMutexGuard was constructed. The guard guarantees exclusive
+        // access to the data through the mutex lock, so dereferencing as mutable is safe.
+        match f(unsafe { orig.d.as_mut() }) {
+            Some(d) => {
+                let d = NonNull::from(d);
+                let orig = ManuallyDrop::new(orig);
+                Ok(MappedMutexGuard {
+                    d,
+                    s: orig.s,
+                    variance: PhantomData,
+                })
+            }
+            None => Err(orig),
+        }
+    }
+}
+
+impl<T: ?Sized> Drop for MappedMutexGuard<'_, T> {
+    fn drop(&mut self) {
+        self.s.release(1);
+    }
+}
+
+impl<T: ?Sized + fmt::Debug> fmt::Debug for MappedMutexGuard<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&**self, f)
+    }
+}
+
+impl<T: ?Sized + fmt::Display> fmt::Display for MappedMutexGuard<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&**self, f)
+    }
+}
+
+impl<T: ?Sized> Deref for MappedMutexGuard<'_, T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        // SAFETY: we hold the lock and the NonNull pointer is valid for the guard's lifetime
+        unsafe { self.d.as_ref() }
+    }
+}
+
+impl<T: ?Sized> DerefMut for MappedMutexGuard<'_, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // SAFETY: we hold the lock and the NonNull pointer is valid for the guard's lifetime
+        unsafe { self.d.as_mut() }
     }
 }
