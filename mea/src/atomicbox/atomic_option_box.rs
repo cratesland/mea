@@ -95,40 +95,20 @@ impl<T> AtomicOptionBox<T> {
     /// This does not allocate or free memory, and it neither clones nor drops any values. `other`
     /// is moved into `self`; the value previously in `self` is returned.
     ///
-    /// If `other` is `Some`, `order` must be either `Ordering::AcqRel` or `Ordering::SeqCst`,
-    /// as other values would not be safe if `T` contains any data.
-    ///
-    /// If `other` is `None`, `order` must be `Ordering::Acquire`, `Ordering::AcqRel`, or
-    /// `Ordering::SeqCst`,
-    ///
-    /// # Panics
-    ///
-    /// Panics if `order` is not one of the allowed values.
-    ///
     /// # Examples
     ///
     /// ```rust
-    /// use std::sync::atomic::Ordering;
-    ///
     /// use mea::atomicbox::AtomicOptionBox;
     ///
     /// let atom = AtomicOptionBox::new(None);
-    /// let prev_value = atom.swap(Some(Box::new("ok")), Ordering::AcqRel);
+    /// let prev_value = atom.swap(Some(Box::new("ok")));
     /// assert_eq!(prev_value, None);
     /// ```
-    pub fn swap(&self, other: Option<Box<T>>, order: Ordering) -> Option<Box<T>> {
-        match (&other, order) {
-            (Some(_), Ordering::AcqRel | Ordering::SeqCst) => {}
-            (None, Ordering::Acquire | Ordering::AcqRel | Ordering::SeqCst) => {}
-            (o, order) => {
-                if o.is_some() {
-                    panic!("atomic swap on Some has invalid order {order:?}");
-                } else {
-                    panic!("atomic swap on None has invalid order {order:?}");
-                }
-            }
-        }
-
+    pub fn swap(&self, other: Option<Box<T>>) -> Option<Box<T>> {
+        let order = match other {
+            Some(_) => Ordering::AcqRel,
+            None => Ordering::Acquire,
+        };
         let new_ptr = into_ptr(other);
         let old_ptr = self.ptr.swap(new_ptr, order);
         unsafe { from_ptr(old_ptr) }
@@ -136,60 +116,37 @@ impl<T> AtomicOptionBox<T> {
 
     /// Atomically set this `AtomicOptionBox` to `other` and drop the previous value.
     ///
-    /// The `AtomicOptionBox` takes ownership of `other`.
-    ///
-    /// If `other` is `Some`, `order` must be either `Ordering::AcqRel` or `Ordering::SeqCst`,
-    /// as other values would not be safe if `T` contains any data.
-    ///
-    /// If `other` is `None`, `order` must be `Ordering::Acquire`, `Ordering::AcqRel`, or
-    /// `Ordering::SeqCst`,
-    ///
-    /// # Panics
-    ///
-    /// Panics if `order` is not one of the allowed values.
-    ///
     /// # Examples
     ///
     /// ```rust
-    /// use std::sync::atomic::Ordering;
-    ///
     /// use mea::atomicbox::AtomicOptionBox;
     ///
     /// let atom = AtomicOptionBox::new(None);
-    /// atom.store(Some(Box::new("ok")), Ordering::AcqRel);
+    /// atom.store(Some(Box::new("ok")));
     /// assert_eq!(atom.into_inner(), Some(Box::new("ok")));
     /// ```
-    pub fn store(&self, other: Option<Box<T>>, order: Ordering) {
-        self.swap(other, order);
+    pub fn store(&self, other: Option<Box<T>>) {
+        self.swap(other);
     }
 
     /// Atomically set this `AtomicOptionBox` to `None` and return the previous value.
     ///
     /// This does not allocate or free memory, and it neither clones nor drops any values. It is
-    /// equivalent to calling `self.swap(None, order)`
-    ///
-    /// `order` must be `Ordering::Acquire`, `Ordering::AcqRel`, or `Ordering::SeqCst`,
-    /// as other values would not be safe if `T` contains any data.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `order` is not one of the allowed values.
+    /// equivalent to calling `self.swap(None)`
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use std::sync::atomic::Ordering;
-    ///
     /// use mea::atomicbox::AtomicOptionBox;
     ///
     /// let atom = AtomicOptionBox::new(Some(Box::new("ok")));
-    /// let prev_value = atom.take(Ordering::AcqRel);
+    /// let prev_value = atom.take();
     /// assert!(prev_value.is_some());
-    /// let prev_value = atom.take(Ordering::AcqRel);
+    /// let prev_value = atom.take();
     /// assert!(prev_value.is_none());
     /// ```
-    pub fn take(&self, order: Ordering) -> Option<Box<T>> {
-        self.swap(None, order)
+    pub fn take(&self) -> Option<Box<T>> {
+        self.swap(None)
     }
 
     /// Atomically swaps the contents of this `AtomicOptionBox` with the contents of `other`.
@@ -197,30 +154,18 @@ impl<T> AtomicOptionBox<T> {
     /// This does not allocate or free memory, and it neither clones nor drops any values. The
     /// pointers in `*other` and `self` are simply exchanged.
     ///
-    /// If `other` is `Some`, `order` must be either `Ordering::AcqRel` or `Ordering::SeqCst`,
-    /// as other values would not be safe if `T` contains any data.
-    ///
-    /// If `other` is `None`, `order` must be `Ordering::Acquire`, `Ordering::AcqRel`, or
-    /// `Ordering::SeqCst`,
-    ///
-    /// # Panics
-    ///
-    /// Panics if `order` is not one of the allowed values.
-    ///
     /// # Examples
     ///
     /// ```rust
-    /// use std::sync::atomic::Ordering;
-    ///
     /// use mea::atomicbox::AtomicOptionBox;
     ///
     /// let atom = AtomicOptionBox::new(None);
     /// let mut boxed = Some(Box::new("ok"));
-    /// let prev_value = atom.swap_mut(&mut boxed, Ordering::AcqRel);
+    /// let prev_value = atom.swap_mut(&mut boxed);
     /// assert_eq!(boxed, None);
     /// ```
-    pub fn swap_mut(&self, other: &mut Option<Box<T>>, order: Ordering) {
-        let previous = self.swap(other.take(), order);
+    pub fn swap_mut(&self, other: &mut Option<Box<T>>) {
+        let previous = self.swap(other.take());
         *other = previous;
     }
 
@@ -297,23 +242,20 @@ mod tests {
     fn atomic_option_box_swap_works() {
         let b = AtomicOptionBox::new(Some(Box::new("hello world")));
         let bis = Box::new("bis");
-        assert_eq!(
-            b.swap(None, Ordering::AcqRel),
-            Some(Box::new("hello world"))
-        );
-        assert_eq!(b.swap(Some(bis), Ordering::AcqRel), None);
-        assert_eq!(b.swap(None, Ordering::AcqRel), Some(Box::new("bis")));
+        assert_eq!(b.swap(None), Some(Box::new("hello world")));
+        assert_eq!(b.swap(Some(bis)), None);
+        assert_eq!(b.swap(None), Some(Box::new("bis")));
     }
 
     #[test]
     fn atomic_option_box_store_works() {
         let b = AtomicOptionBox::new(Some(Box::new("hello world")));
-        b.store(None, Ordering::AcqRel);
+        b.store(None);
         assert_eq!(b.into_inner(), None);
 
         let b = AtomicOptionBox::new(Some(Box::new("hello world")));
         let bis = Box::new("bis");
-        b.store(Some(bis), Ordering::AcqRel);
+        b.store(Some(bis));
         assert_eq!(b.into_inner(), Some(Box::new("bis")));
     }
 
@@ -321,12 +263,12 @@ mod tests {
     fn atomic_option_box_swap_mut_works() {
         let b = AtomicOptionBox::new(Some(Box::new("hello world")));
         let mut bis = None;
-        b.swap_mut(&mut bis, Ordering::AcqRel);
+        b.swap_mut(&mut bis);
         assert_eq!(bis, Some(Box::new("hello world")));
         bis = Some(Box::new("bis"));
-        b.swap_mut(&mut bis, Ordering::AcqRel);
+        b.swap_mut(&mut bis);
         assert_eq!(bis, None);
-        b.swap_mut(&mut bis, Ordering::AcqRel);
+        b.swap_mut(&mut bis);
         assert_eq!(bis, Some(Box::new("bis")));
     }
 
@@ -340,11 +282,11 @@ mod tests {
         let p2 = &*box2 as *const i32;
         assert_ne!(p2, p1);
 
-        let box3 = atom.swap(Some(box2), Ordering::AcqRel).unwrap(); // box1 out, box2 in
+        let box3 = atom.swap(Some(box2)).unwrap(); // box1 out, box2 in
         let p3 = &*box3 as *const i32;
         assert_eq!(p3, p1); // box3 is box1
 
-        let box4 = atom.swap(None, Ordering::AcqRel).unwrap(); // box2 out, None in
+        let box4 = atom.swap(None).unwrap(); // box2 out, None in
         let p4 = &*box4 as *const i32;
         assert_eq!(p4, p2); // box4 is box2
     }
@@ -363,22 +305,15 @@ mod tests {
         {
             let ab = AtomicOptionBox::new(Some(Box::new(K(n.clone(), 5))));
             assert_eq!(n.load(Ordering::Relaxed), 0);
-            let first = ab.swap(None, Ordering::AcqRel);
+            let first = ab.swap(None);
             assert_eq!(n.load(Ordering::Relaxed), 0);
             drop(first);
             assert_eq!(n.load(Ordering::Relaxed), 5);
-            let second = ab.swap(Some(Box::new(K(n.clone(), 13))), Ordering::AcqRel);
+            let second = ab.swap(Some(Box::new(K(n.clone(), 13))));
             assert!(second.is_none());
             assert_eq!(n.load(Ordering::Relaxed), 5);
         }
         assert_eq!(n.load(Ordering::Relaxed), 5 + 13);
-    }
-
-    #[test]
-    #[should_panic(expected = "atomic swap on None has invalid order Release")]
-    fn cant_use_foolish_swap_ordering_type() {
-        let atom = AtomicOptionBox::new(Some(Box::new(0)));
-        atom.swap(None, Ordering::Release); // nope
     }
 
     #[test]
