@@ -72,7 +72,9 @@ mod test;
 ///
 /// See the [module level documentation](self) for more.
 pub struct Mutex<T: ?Sized> {
+    /// Semaphore used to control access to protected data, ensuring mutual exclusion
     s: internal::Semaphore,
+    /// Container storing the protected data, allowing interior mutability
     c: UnsafeCell<T>,
 }
 
@@ -406,7 +408,7 @@ impl<'a, T: ?Sized> MutexGuard<'a, T> {
     ///
     /// let mutex = Mutex::new(db);
     /// let guard = mutex.lock().await;
-    /// 
+    ///
     /// // Try to map to admin user's email if admin exists
     /// let admin_email_guard = MutexGuard::try_map(guard, |db| {
     ///     if let Some(admin_id) = db.admin_user_id {
@@ -532,8 +534,8 @@ impl<T: ?Sized> OwnedMutexGuard<T> {
         F: FnOnce(&mut T) -> &mut U,
         U: ?Sized,
     {
-        let d = f(&mut *orig) as *mut U;
-
+        let d = NonNull::from(f(&mut *orig));
+        
         let guard = ManuallyDrop::new(orig);
 
         let lock = unsafe { std::ptr::read(&guard.lock) };
@@ -580,7 +582,7 @@ impl<T: ?Sized> OwnedMutexGuard<T> {
     {
         match f(&mut *orig) {
             Some(d) => {
-                let d = d as *mut U;
+                let d = NonNull::from(d);
                 let guard = ManuallyDrop::new(orig);
 
                 // SAFETY: We safely extract the Arc from the ManuallyDrop guard
@@ -644,14 +646,16 @@ impl<T: ?Sized> OwnedMutexGuard<T> {
 /// let mutex = Mutex::new(user);
 /// let guard = mutex.lock().await;
 /// let profile_guard = MutexGuard::map(guard, |user| &mut user.profile);
-/// 
+///
 /// // Now we can only access the user's profile
 /// assert_eq!(profile_guard.email, "user@example.com");
 /// # }
 /// ```
 #[must_use = "if unused the Mutex will immediately unlock"]
 pub struct MappedMutexGuard<'a, T: ?Sized> {
+    /// Non-null pointer to the mapped data
     d: NonNull<T>,
+    /// Reference to the original mutex's semaphore, used for releasing the lock
     s: &'a internal::Semaphore,
     variance: PhantomData<&'a mut T>,
 }
@@ -740,7 +744,7 @@ impl<'a, T: ?Sized> MappedMutexGuard<'a, T> {
     ///
     /// let mutex = Mutex::new(user);
     /// let guard = mutex.lock().await;
-    /// 
+    ///
     /// // First map to user profile
     /// let profile_guard = MutexGuard::map(guard, |user| &mut user.profile);
     /// // Then map to the email field specifically
@@ -754,10 +758,8 @@ impl<'a, T: ?Sized> MappedMutexGuard<'a, T> {
         F: FnOnce(&mut T) -> &mut U,
         U: ?Sized,
     {
-        // SAFETY: orig.d is a valid NonNull<T> pointer that was created from a valid reference
-        // when the original MappedMutexGuard was constructed. The guard guarantees exclusive
-        // access to the data through the mutex lock, so dereferencing as mutable is safe.
-        let d = NonNull::from(f(unsafe { orig.d.as_mut() }));
+        // Use DerefMut to safely get mutable reference, avoiding explicit unsafe block
+        let d = NonNull::from(f(&mut *orig));
         let orig = ManuallyDrop::new(orig);
         MappedMutexGuard {
             d,
@@ -794,7 +796,7 @@ impl<'a, T: ?Sized> MappedMutexGuard<'a, T> {
     ///
     /// let mutex = Mutex::new(data);
     /// let guard = mutex.lock().await;
-    /// 
+    ///
     /// // First map to the value field
     /// let value_guard = MutexGuard::map(guard, |data| &mut data.value);
     /// // Then try to map to the inner string if it exists
@@ -810,10 +812,8 @@ impl<'a, T: ?Sized> MappedMutexGuard<'a, T> {
         F: FnOnce(&mut T) -> Option<&mut U>,
         U: ?Sized,
     {
-        // SAFETY: orig.d is a valid NonNull<T> pointer that was created from a valid reference
-        // when the original MappedMutexGuard was constructed. The guard guarantees exclusive
-        // access to the data through the mutex lock, so dereferencing as mutable is safe.
-        match f(unsafe { orig.d.as_mut() }) {
+        // Use DerefMut to safely get mutable reference, avoiding explicit unsafe block
+        match f(&mut *orig) {
             Some(d) => {
                 let d = NonNull::from(d);
                 let orig = ManuallyDrop::new(orig);
@@ -876,9 +876,9 @@ pub struct OwnedMappedMutexGuard<T: ?Sized, U: ?Sized> {
     // This Arc acts as an ownership certificate, ensuring the Mutex remains valid
     // and the lock is not released
     lock: Arc<Mutex<T>>,
-    // This raw pointer precisely points to the subfield U, telling us which
-    // memory location we can operate on
-    d: *mut U,
+    // This NonNull pointer precisely points to the subfield U, telling us which
+    // memory location we can operate on, with compile-time guarantee of non-null
+    d: NonNull<U>,
     variance: PhantomData<U>,
 }
 
@@ -916,17 +916,17 @@ impl<T: ?Sized, U: ?Sized + fmt::Display> fmt::Display for OwnedMappedMutexGuard
 impl<T: ?Sized, U: ?Sized> Deref for OwnedMappedMutexGuard<T, U> {
     type Target = U;
     fn deref(&self) -> &Self::Target {
-        // SAFETY: we hold the lock and the raw pointer is valid for the guard's lifetime
+        // SAFETY: we hold the lock and the NonNull pointer is valid for the guard's lifetime
         // The Arc ensures the underlying data remains valid
-        unsafe { &*self.d }
+        unsafe { self.d.as_ref() }
     }
 }
 
 impl<T: ?Sized, U: ?Sized> DerefMut for OwnedMappedMutexGuard<T, U> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        // SAFETY: we hold the lock and the raw pointer is valid for the guard's lifetime
+        // SAFETY: we hold the lock and the NonNull pointer is valid for the guard's lifetime
         // The Arc ensures the underlying data remains valid
-        unsafe { &mut *self.d }
+        unsafe { self.d.as_mut() }
     }
 }
 
@@ -959,7 +959,7 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedMutexGuard<T, U> {
     ///
     /// let mutex = Arc::new(Mutex::new(config));
     /// let guard = mutex.clone().lock_owned().await;
-    /// 
+    ///
     /// // First map to config
     /// let config_guard = OwnedMutexGuard::map(guard, |config| &mut config.host);
     /// // Then map to the host string specifically
@@ -973,8 +973,8 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedMutexGuard<T, U> {
         F: FnOnce(&mut U) -> &mut V,
         V: ?Sized,
     {
-        // Use DerefMut for consistency with other map implementations
-        let d = f(&mut *orig) as *mut V;
+        // Use DerefMut to maintain consistency with other map implementations
+        let d = NonNull::from(f(&mut *orig));
         let orig = ManuallyDrop::new(orig);
 
         // SAFETY: We safely extract the Arc from the ManuallyDrop guard
@@ -1022,7 +1022,7 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedMutexGuard<T, U> {
     ///
     /// let mutex = Arc::new(Mutex::new(node));
     /// let guard = mutex.clone().lock_owned().await;
-    /// 
+    ///
     /// // First map to left child
     /// let left_guard = OwnedMutexGuard::map(guard, |node| &mut node.left);
     /// // Try to access the left child if it exists
@@ -1038,10 +1038,10 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedMutexGuard<T, U> {
         F: FnOnce(&mut U) -> Option<&mut V>,
         V: ?Sized,
     {
-        // Use DerefMut for consistency with other try_map implementations
+        // Use DerefMut to maintain consistency with other try_map implementations
         match f(&mut *orig) {
             Some(d) => {
-                let d = d as *mut V;
+                let d = NonNull::from(d);
                 let orig = ManuallyDrop::new(orig);
 
                 // SAFETY: We safely extract the Arc from the ManuallyDrop guard
