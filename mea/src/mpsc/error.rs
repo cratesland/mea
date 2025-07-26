@@ -16,8 +16,8 @@ use std::fmt;
 
 /// An error returned when trying to send on a closed channel.
 ///
-/// Returned from [`UnboundedSender::send`] and [`BoundedSender::send`] if the corresponding
-/// [`UnboundedReceiver`] has already been dropped.
+/// Returned from [`crate::mpsc::UnboundedSender::send`] and [`crate::mpsc::BoundedSender::send`] if the corresponding
+/// [`crate::mpsc::UnboundedReceiver`] has already been dropped.
 ///
 /// The message that could not be sent can be retrieved again with
 /// [`SendError::into_inner`].
