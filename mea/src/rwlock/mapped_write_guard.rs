@@ -37,6 +37,8 @@ use crate::internal;
 /// [`try_map`]: crate::rwlock::RwLockWriteGuard::try_map
 /// [`RwLockWriteGuard`]: crate::rwlock::RwLockWriteGuard
 ///
+/// See the [module level documentation](crate::rwlock) for more.
+///
 /// # Examples
 ///
 /// ```
@@ -211,31 +213,47 @@ impl<'a, T: ?Sized> MappedRwLockWriteGuard<'a, T> {
     /// use mea::rwlock::{RwLock, RwLockWriteGuard, MappedRwLockWriteGuard};
     ///
     /// #[derive(Debug)]
-    /// struct Config {
-    ///     database: DatabaseConfig,
+    /// struct Document {
+    ///     title: String,
+    ///     content: String,
+    ///     metadata: Option<Metadata>,
     /// }
     ///
     /// #[derive(Debug)]
-    /// struct DatabaseConfig {
-    ///     url: Option<String>,
+    /// struct Metadata {
+    ///     author: String,
+    ///     version: Option<u32>,
     /// }
     ///
-    /// let config = Config {
-    ///     database: DatabaseConfig {
-    ///         url: Some("postgres://localhost".to_owned()),
-    ///     },
+    /// let doc = Document {
+    ///     title: "My Document".to_owned(),
+    ///     content: "Initial content".to_owned(),
+    ///     metadata: Some(Metadata {
+    ///         author: "Alice".to_owned(),
+    ///         version: Some(1),
+    ///     }),
     /// };
     ///
-    /// let rwlock = RwLock::new(config);
+    /// let rwlock = RwLock::new(doc);
     /// let mut guard = rwlock.write().await;
-    /// let mut db_guard = RwLockWriteGuard::map(guard, |config| &mut config.database.url);
-    /// // Try to map to the inner string if it exists
-    /// let mut url_guard = MappedRwLockWriteGuard::try_map(db_guard, |opt| {
-    ///     opt.as_mut()
-    /// }).expect("url should exist");
     ///
-    /// *url_guard = "postgres://newhost".to_owned();
-    /// assert_eq!(&*url_guard, "postgres://newhost");
+    /// // First map to the metadata field
+    /// let meta_guard = RwLockWriteGuard::map(guard, |doc| &mut doc.metadata);
+    ///
+    /// // Try to map to the version number if metadata and version both exist
+    /// let version_result = MappedRwLockWriteGuard::try_map(meta_guard, |meta_opt| {
+    ///     meta_opt.as_mut()?.version.as_mut()
+    /// });
+    /// match version_result {
+    ///     Ok(mut version_guard) => {
+    ///         *version_guard += 1; // Increment version
+    ///         assert_eq!(*version_guard, 2);
+    ///     }
+    ///     Err(_) => {
+    ///         // Handle case where metadata or version doesn't exist
+    ///         println!("No version to update");
+    ///     }
+    /// }
     /// # }
     /// ```
     pub fn try_map<U, F>(mut orig: Self, f: F) -> Result<MappedRwLockWriteGuard<'a, U>, Self>

@@ -23,6 +23,8 @@ use crate::rwlock::{RwLock, MappedRwLockWriteGuard};
 /// RAII structure used to release the exclusive write access of a lock when dropped.
 ///
 /// This structure is created by the [`RwLock::write`] method.
+///
+/// See the [module level documentation](crate::rwlock) for more.
 #[must_use = "if unused the RwLock will immediately unlock"]
 pub struct RwLockWriteGuard<'a, T: ?Sized> {
     pub(super) permits_acquired: usize,

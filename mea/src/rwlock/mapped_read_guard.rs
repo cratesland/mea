@@ -37,6 +37,8 @@ use crate::internal;
 /// [`try_map`]: crate::rwlock::RwLockReadGuard::try_map
 /// [`RwLockReadGuard`]: crate::rwlock::RwLockReadGuard
 ///
+/// See the [module level documentation](crate::rwlock) for more.
+///
 /// # Examples
 ///
 /// ```
@@ -202,30 +204,36 @@ impl<'a, T: ?Sized> MappedRwLockReadGuard<'a, T> {
     /// use mea::rwlock::{RwLock, RwLockReadGuard, MappedRwLockReadGuard};
     ///
     /// #[derive(Debug)]
-    /// struct Config {
-    ///     database: DatabaseConfig,
+    /// struct Person {
+    ///     name: String,
+    ///     email: Option<String>,
     /// }
     ///
-    /// #[derive(Debug)]
-    /// struct DatabaseConfig {
-    ///     url: Option<String>,
-    /// }
-    ///
-    /// let config = Config {
-    ///     database: DatabaseConfig {
-    ///         url: Some("postgres://localhost".to_owned()),
-    ///     },
+    /// let person = Person {
+    ///     name: "Alice".to_owned(),
+    ///     email: Some("alice@example.com".to_owned()),
     /// };
     ///
-    /// let rwlock = RwLock::new(config);
+    /// let rwlock = RwLock::new(person);
     /// let guard = rwlock.read().await;
-    /// let db_guard = RwLockReadGuard::map(guard, |config| &config.database.url);
-    /// // Try to map to the inner string if it exists
-    /// let url_guard = MappedRwLockReadGuard::try_map(db_guard, |opt| {
-    ///     opt.as_ref()
-    /// }).expect("url should exist");
+    /// let name_guard = RwLockReadGuard::map(guard, |person| &person.name);
     ///
-    /// assert_eq!(&*url_guard, "postgres://localhost");
+    /// // Try to map to the email if it exists
+    /// let person_guard = rwlock.read().await;
+    /// let email_result = MappedRwLockReadGuard::try_map(
+    ///     RwLockReadGuard::map(person_guard, |person| &person.email),
+    ///     |email_opt| email_opt.as_ref()
+    /// );
+    ///
+    /// match email_result {
+    ///     Ok(email_guard) => {
+    ///         assert_eq!(&*email_guard, "alice@example.com");
+    ///     }
+    ///     Err(_original_guard) => {
+    ///         // Email was None, original guard is returned
+    ///         println!("No email available");
+    ///     }
+    /// }
     /// # }
     /// ```
     pub fn try_map<U, F>(orig: Self, f: F) -> Result<MappedRwLockReadGuard<'a, U>, Self>

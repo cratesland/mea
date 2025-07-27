@@ -280,6 +280,8 @@ impl<T: ?Sized> Mutex<T> {
 ///
 /// [`lock`]: Mutex::lock
 /// [`try_lock`]: Mutex::try_lock
+///
+/// See the [module level documentation](self) for more.
 #[must_use = "if unused the Mutex will immediately unlock"]
 pub struct MutexGuard<'a, T: ?Sized> {
     lock: &'a Mutex<T>,
@@ -359,7 +361,7 @@ impl<'a, T: ?Sized> MutexGuard<'a, T> {
     ///
     /// let mutex = Mutex::new(user);
     /// let guard = mutex.lock().await;
-    /// 
+    ///
     /// // Map to only access the user's profile, allowing fine-grained locking
     /// let profile_guard = MutexGuard::map(guard, |user| &mut user.profile);
     /// assert_eq!(profile_guard.email, "user@example.com");
@@ -453,6 +455,8 @@ impl<'a, T: ?Sized> MutexGuard<'a, T> {
 ///
 /// The lock is automatically released whenever the guard is dropped, at which point `lock` will
 /// succeed yet again.
+///
+/// See the [module level documentation](self) for more.
 #[must_use = "if unused the Mutex will immediately unlock"]
 pub struct OwnedMutexGuard<T: ?Sized> {
     lock: Arc<Mutex<T>>,
@@ -523,7 +527,7 @@ impl<T: ?Sized> OwnedMutexGuard<T> {
     ///
     /// let mutex = Arc::new(Mutex::new(config));
     /// let guard = mutex.clone().lock_owned().await;
-    /// 
+    ///
     /// // Map to access only the value field
     /// let value_guard = OwnedMutexGuard::map(guard, |config| &mut config.value);
     /// assert_eq!(*value_guard, 42);
@@ -535,7 +539,7 @@ impl<T: ?Sized> OwnedMutexGuard<T> {
         U: ?Sized,
     {
         let d = NonNull::from(f(&mut *orig));
-        
+
         let guard = ManuallyDrop::new(orig);
 
         let lock = unsafe { std::ptr::read(&guard.lock) };
@@ -566,7 +570,7 @@ impl<T: ?Sized> OwnedMutexGuard<T> {
     /// let data = vec![1, 2, 3, 4, 5];
     /// let mutex = Arc::new(Mutex::new(data));
     /// let guard = mutex.clone().lock_owned().await;
-    /// 
+    ///
     /// // Map to the first element
     /// let first_guard = OwnedMutexGuard::try_map(guard, |vec| {
     ///     vec.get_mut(0)
@@ -651,6 +655,8 @@ impl<T: ?Sized> OwnedMutexGuard<T> {
 /// assert_eq!(profile_guard.email, "user@example.com");
 /// # }
 /// ```
+///
+/// See the [module level documentation](self) for more.
 #[must_use = "if unused the Mutex will immediately unlock"]
 pub struct MappedMutexGuard<'a, T: ?Sized> {
     /// Non-null pointer to the mapped data

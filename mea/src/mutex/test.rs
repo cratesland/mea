@@ -201,7 +201,6 @@ async fn test_guard_prevents_concurrent_access() {
     assert!(mutex.try_lock().is_some(), "Lock should be available after all guards are dropped");
 }
 
-
 #[test]
 fn test_lock_panic_safety() {
     use std::panic::AssertUnwindSafe;
@@ -271,8 +270,6 @@ async fn test_mapped_guard_panic_safety() {
     let guard = mutex.try_lock();
     assert!(guard.is_some());
 }
-
-
 
 #[tokio::test]
 async fn test_memory_ordering_correctness() {

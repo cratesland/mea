@@ -21,6 +21,8 @@ use crate::rwlock::{RwLock, MappedRwLockReadGuard};
 /// RAII structure used to release the shared read access of a lock when dropped.
 ///
 /// This structure is created by the [`RwLock::read`] method.
+///
+/// See the [module level documentation](crate::rwlock) for more.
 #[must_use = "if unused the RwLock will immediately unlock"]
 pub struct RwLockReadGuard<'a, T: ?Sized> {
     pub(super) lock: &'a RwLock<T>,
