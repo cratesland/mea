@@ -68,9 +68,18 @@
 
 use std::cell::UnsafeCell;
 use std::fmt;
+use std::sync::Arc;
 
 use crate::internal::Semaphore;
 
+mod mapped_read_guard;
+pub use mapped_read_guard::MappedRwLockReadGuard;
+mod mapped_write_guard;
+pub use mapped_write_guard::MappedRwLockWriteGuard;
+mod owned_mapped_read_guard;
+pub use owned_mapped_read_guard::OwnedMappedRwLockReadGuard;
+mod owned_mapped_write_guard;
+pub use owned_mapped_write_guard::OwnedMappedRwLockWriteGuard;
 mod owned_read_guard;
 pub use owned_read_guard::OwnedRwLockReadGuard;
 mod owned_write_guard;
@@ -79,6 +88,9 @@ mod read_guard;
 pub use read_guard::RwLockReadGuard;
 mod write_guard;
 pub use write_guard::RwLockWriteGuard;
+
+#[cfg(test)]
+mod test;
 
 /// A reader-writer lock that allows multiple readers or a single writer at a time.
 ///
@@ -185,5 +197,318 @@ impl<T: ?Sized> RwLock<T> {
     /// ```
     pub fn get_mut(&mut self) -> &mut T {
         self.c.get_mut()
+    }
+}
+
+
+impl<T: ?Sized> RwLock<T> {
+    /// Locks this `RwLock` with shared read access, causing the current task to yield until the
+    /// lock has been acquired.
+    ///
+    /// The calling task will yield until there are no writers which hold the lock. There may be
+    /// other readers inside the lock when the task resumes.
+    ///
+    /// Note that under the priority policy of [`RwLock`], read locks are not granted until prior
+    /// write locks, to prevent starvation. Therefore, deadlock may occur if a read lock is held
+    /// by the current task, a write lock attempt is made, and then a subsequent read lock attempt
+    /// is made by the current task.
+    ///
+    /// Returns an RAII guard which will drop this read access of the `RwLock` when dropped.
+    ///
+    /// # Cancel safety
+    ///
+    /// This method uses a queue to fairly distribute locks in the order they were requested.
+    /// Cancelling a call to `read` makes you lose your place in the queue.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use std::sync::Arc;
+    ///
+    /// use mea::rwlock::RwLock;
+    ///
+    /// let lock = Arc::new(RwLock::new(1));
+    /// let lock_clone = lock.clone();
+    ///
+    /// let n = lock.read().await;
+    /// assert_eq!(*n, 1);
+    ///
+    /// tokio::spawn(async move {
+    ///     // while the outer read lock is held, we acquire a read lock, too
+    ///     let r = lock_clone.read().await;
+    ///     assert_eq!(*r, 1);
+    /// })
+    /// .await
+    /// .unwrap();
+    /// # }
+    /// ```
+    pub async fn read(&self) -> RwLockReadGuard<'_, T> {
+        self.s.acquire(1).await;
+        RwLockReadGuard { lock: self }
+    }
+
+    /// Attempts to acquire this `RwLock` with shared read access.
+    ///
+    /// If the access couldn't be acquired immediately, returns `None`. Otherwise, an RAII guard is
+    /// returned which will release read access when dropped.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    ///
+    /// use mea::rwlock::RwLock;
+    ///
+    /// let lock = Arc::new(RwLock::new(1));
+    ///
+    /// let v = lock.try_read().unwrap();
+    /// assert_eq!(*v, 1);
+    /// drop(v);
+    ///
+    /// let v = lock.try_write().unwrap();
+    /// assert!(lock.try_read().is_none());
+    /// ```
+    pub fn try_read(&self) -> Option<RwLockReadGuard<'_, T>> {
+        if self.s.try_acquire(1) {
+            Some(RwLockReadGuard { lock: self })
+        } else {
+            None
+        }
+    }
+}
+
+impl<T: ?Sized> RwLock<T> {
+    /// Locks this `RwLock` with exclusive write access, causing the current task to yield until the
+    /// lock has been acquired.
+    ///
+    /// The calling task will yield while other writers or readers currently have access to the
+    /// lock.
+    ///
+    /// Returns an RAII guard which will drop the write access of this `RwLock` when dropped.
+    ///
+    /// # Cancel safety
+    ///
+    /// This method uses a queue to fairly distribute locks in the order they were requested.
+    /// Cancelling a call to `write` makes you lose your place in the queue.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use mea::rwlock::RwLock;
+    ///
+    /// let lock = RwLock::new(1);
+    /// let mut n = lock.write().await;
+    /// *n = 2;
+    /// # }
+    /// ```
+    pub async fn write(&self) -> RwLockWriteGuard<'_, T> {
+        self.s.acquire(self.max_readers).await;
+        RwLockWriteGuard {
+            permits_acquired: self.max_readers,
+            lock: self,
+        }
+    }
+
+    /// Attempts to acquire this `RwLock` with exclusive write access.
+    ///
+    /// If the access couldn't be acquired immediately, returns `None`. Otherwise, an RAII guard is
+    /// returned which will release write access when dropped.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    ///
+    /// use mea::rwlock::RwLock;
+    ///
+    /// let lock = Arc::new(RwLock::new(1));
+    ///
+    /// let v = lock.try_read().unwrap();
+    /// assert!(lock.try_write().is_none());
+    /// drop(v);
+    ///
+    /// let mut v = lock.try_write().unwrap();
+    /// *v = 2;
+    /// ```
+    pub fn try_write(&self) -> Option<RwLockWriteGuard<'_, T>> {
+        if self.s.try_acquire(self.max_readers) {
+            Some(RwLockWriteGuard {
+                permits_acquired: self.max_readers,
+                lock: self,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl<T: ?Sized> RwLock<T> {
+    /// Locks this `RwLock` with shared read access, causing the current task to yield until the
+    /// lock has been acquired.
+    ///
+    /// The calling task will yield until there are no writers which hold the lock. There may be
+    /// other readers inside the lock when the task resumes.
+    ///
+    /// This method is identical to [`RwLock::read`], except that the returned guard references the
+    /// `RwLock` with an [`Arc`] rather than by borrowing it. Therefore, the `RwLock` must be
+    /// wrapped in an `Arc` to call this method, and the guard will live for the `'static` lifetime,
+    /// as it keeps the `RwLock` alive by holding an `Arc`.
+    ///
+    /// Note that under the priority policy of [`RwLock`], read locks are not granted until prior
+    /// write locks, to prevent starvation. Therefore, deadlock may occur if a read lock is held
+    /// by the current task, a write lock attempt is made, and then a subsequent read lock attempt
+    /// is made by the current task.
+    ///
+    /// Returns an RAII guard which will drop this read access of the `RwLock` when dropped.
+    ///
+    /// # Cancel safety
+    ///
+    /// This method uses a queue to fairly distribute locks in the order they were requested.
+    /// Cancelling a call to `read_owned` makes you lose your place in the queue.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use std::sync::Arc;
+    ///
+    /// use mea::rwlock::RwLock;
+    ///
+    /// let lock = Arc::new(RwLock::new(1));
+    /// let lock_clone = lock.clone();
+    ///
+    /// let n = lock.read_owned().await;
+    /// assert_eq!(*n, 1);
+    ///
+    /// tokio::spawn(async move {
+    ///     // while the outer read lock is held, we acquire a read lock, too
+    ///     let r = lock_clone.read_owned().await;
+    ///     assert_eq!(*r, 1);
+    /// })
+    /// .await
+    /// .unwrap();
+    /// # }
+    /// ```
+    pub async fn read_owned(self: Arc<Self>) -> OwnedRwLockReadGuard<T> {
+        self.s.acquire(1).await;
+        OwnedRwLockReadGuard { lock: self }
+    }
+
+    /// Attempts to acquire this `RwLock` with shared read access.
+    ///
+    /// If the access couldn't be acquired immediately, returns `None`. Otherwise, an RAII guard is
+    /// returned which will release read access when dropped.
+    ///
+    /// This method is identical to [`RwLock::try_read`], except that the returned guard references
+    /// the `RwLock` with an [`Arc`] rather than by borrowing it. Therefore, the `RwLock` must
+    /// be wrapped in an `Arc` to call this method, and the guard will live for the `'static`
+    /// lifetime, as it keeps the `RwLock` alive by holding an `Arc`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    ///
+    /// use mea::rwlock::RwLock;
+    ///
+    /// let lock = Arc::new(RwLock::new(1));
+    ///
+    /// let v = lock.clone().try_read_owned().unwrap();
+    /// assert_eq!(*v, 1);
+    /// drop(v);
+    ///
+    /// let v = lock.try_write().unwrap();
+    /// assert!(lock.clone().try_read_owned().is_none());
+    /// ```
+    pub fn try_read_owned(self: Arc<Self>) -> Option<OwnedRwLockReadGuard<T>> {
+        if self.s.try_acquire(1) {
+            Some(OwnedRwLockReadGuard { lock: self })
+        } else {
+            None
+        }
+    }
+}
+
+impl<T: ?Sized> RwLock<T> {
+    /// Locks this `RwLock` with exclusive write access, causing the current task to yield until the
+    /// lock has been acquired.
+    ///
+    /// The calling task will yield while other writers or readers currently have access to the
+    /// lock.
+    ///
+    /// This method is identical to [`RwLock::write`], except that the returned guard references the
+    /// `RwLock` with an [`Arc`] rather than by borrowing it. Therefore, the `RwLock` must be
+    /// wrapped in an `Arc` to call this method, and the guard will live for the `'static` lifetime,
+    /// as it keeps the `RwLock` alive by holding an `Arc`.
+    ///
+    /// Returns an RAII guard which will drop the write access of this `RwLock` when dropped.
+    ///
+    /// # Cancel safety
+    ///
+    /// This method uses a queue to fairly distribute locks in the order they were requested.
+    /// Cancelling a call to `write_owned` makes you lose your place in the queue.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use std::sync::Arc;
+    ///
+    /// use mea::rwlock::RwLock;
+    ///
+    /// let lock = Arc::new(RwLock::new(1));
+    /// let mut n = lock.write_owned().await;
+    /// *n = 2;
+    /// # }
+    /// ```
+    pub async fn write_owned(self: Arc<Self>) -> OwnedRwLockWriteGuard<T> {
+        self.s.acquire(self.max_readers).await;
+        OwnedRwLockWriteGuard {
+            permits_acquired: self.max_readers,
+            lock: self,
+        }
+    }
+
+    /// Attempts to acquire this `RwLock` with exclusive write access.
+    ///
+    /// If the access couldn't be acquired immediately, returns `None`. Otherwise, an RAII guard is
+    /// returned which will release write access when dropped.
+    ///
+    /// This method is identical to [`RwLock::try_write`], except that the returned guard references
+    /// the `RwLock` with an [`Arc`] rather than by borrowing it. Therefore, the `RwLock` must
+    /// be wrapped in an `Arc` to call this method, and the guard will live for the `'static`
+    /// lifetime, as it keeps the `RwLock` alive by holding an `Arc`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    ///
+    /// use mea::rwlock::RwLock;
+    ///
+    /// let lock = Arc::new(RwLock::new(1));
+    ///
+    /// let v = lock.try_read().unwrap();
+    /// assert!(lock.clone().try_write_owned().is_none());
+    /// drop(v);
+    ///
+    /// let mut v = lock.try_write_owned().unwrap();
+    /// *v = 2;
+    /// ```
+    pub fn try_write_owned(self: Arc<Self>) -> Option<OwnedRwLockWriteGuard<T>> {
+        if self.s.try_acquire(self.max_readers) {
+            Some(OwnedRwLockWriteGuard {
+                permits_acquired: self.max_readers,
+                lock: self,
+            })
+        } else {
+            None
+        }
     }
 }
