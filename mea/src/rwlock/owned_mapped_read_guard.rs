@@ -21,15 +21,16 @@ use std::sync::Arc;
 
 use crate::rwlock::RwLock;
 
-/// Owned RAII structure used to release the shared read access of a lock when dropped, for a mapped component of the locked data.
+/// Owned RAII structure used to release the shared read access of a lock when dropped, for a mapped
+/// component of the locked data.
 ///
 /// This guard is only available from a [`RwLock`] that is wrapped in an [`Arc`]. It is similar to
 /// [`MappedRwLockReadGuard`], except that rather than borrowing the `RwLock`, it clones the `Arc`,
 /// incrementing the reference count. This means that unlike `MappedRwLockReadGuard`, it will have
 /// the `'static` lifetime.
 ///
-/// As long as you have this guard, you have shared read access to the underlying `U`. The guard 
-/// internally keeps an `Arc` reference to the original rwlock, so the original lock is 
+/// As long as you have this guard, you have shared read access to the underlying `U`. The guard
+/// internally keeps an `Arc` reference to the original rwlock, so the original lock is
 /// maintained until this guard is dropped.
 ///
 /// `OwnedMappedRwLockReadGuard` implements [`Send`] and [`Sync`]
@@ -37,7 +38,7 @@ use crate::rwlock::RwLock;
 /// boundaries and shared between threads safely.
 ///
 /// [`map`]: crate::rwlock::OwnedRwLockReadGuard::map
-/// [`try_map`]: crate::rwlock::OwnedRwLockReadGuard::try_map
+/// [`filter_map`]: crate::rwlock::OwnedRwLockReadGuard::filter_map
 /// [`OwnedRwLockReadGuard`]: crate::rwlock::OwnedRwLockReadGuard
 /// [`MappedRwLockReadGuard`]: crate::rwlock::MappedRwLockReadGuard
 /// [`RwLock`]: crate::rwlock::RwLock
@@ -50,7 +51,9 @@ use crate::rwlock::RwLock;
 /// # #[tokio::main]
 /// # async fn main() {
 /// use std::sync::Arc;
-/// use mea::rwlock::{RwLock, OwnedRwLockReadGuard};
+///
+/// use mea::rwlock::OwnedRwLockReadGuard;
+/// use mea::rwlock::RwLock;
 ///
 /// #[derive(Debug)]
 /// struct User {
@@ -91,12 +94,13 @@ pub struct OwnedMappedRwLockReadGuard<T: ?Sized, U: ?Sized> {
     variance: PhantomData<fn() -> U>,
 }
 
-// SAFETY: Arc<RwLock<T>> is Send when T: Send + Sync, and we only provide shared access (&U) 
+// SAFETY: Arc<RwLock<T>> is Send when T: Send + Sync, and we only provide shared access (&U)
 // through deref(), so U: Sync is sufficient for safe cross-thread transfer.
 unsafe impl<T: ?Sized + Send + Sync, U: ?Sized + Sync> Send for OwnedMappedRwLockReadGuard<T, U> {}
 
-// SAFETY: OwnedMappedRwLockReadGuard can be safely shared between threads when T: Send + Sync and U: Sync.
-// Multiple threads can hold &OwnedMappedRwLockReadGuard and call deref() concurrently, which only returns &U.
+// SAFETY: OwnedMappedRwLockReadGuard can be safely shared between threads when T: Send + Sync and
+// U: Sync. Multiple threads can hold &OwnedMappedRwLockReadGuard and call deref() concurrently,
+// which only returns &U.
 unsafe impl<T: ?Sized + Send + Sync, U: ?Sized + Sync> Sync for OwnedMappedRwLockReadGuard<T, U> {}
 
 impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockReadGuard<T, U> {
@@ -134,15 +138,15 @@ impl<T: ?Sized, U: ?Sized> Deref for OwnedMappedRwLockReadGuard<T, U> {
     }
 }
 
-
-
 impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockReadGuard<T, U> {
     /// Makes a new [`OwnedMappedRwLockReadGuard`] for a component of the locked data.
     ///
-    /// This operation cannot fail as the `OwnedMappedRwLockReadGuard` passed in already locked the rwlock.
+    /// This operation cannot fail as the `OwnedMappedRwLockReadGuard` passed in already locked the
+    /// rwlock.
     ///
-    /// This is an associated function that needs to be used as `OwnedMappedRwLockReadGuard::map(...)`. A
-    /// method would interfere with methods of the same name on the contents of the locked data.
+    /// This is an associated function that needs to be used as
+    /// `OwnedMappedRwLockReadGuard::map(...)`. A method would interfere with methods of the
+    /// same name on the contents of the locked data.
     ///
     /// # Examples
     ///
@@ -150,7 +154,10 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockReadGuard<T, U> {
     /// # #[tokio::main]
     /// # async fn main() {
     /// use std::sync::Arc;
-    /// use mea::rwlock::{RwLock, OwnedRwLockReadGuard, OwnedMappedRwLockReadGuard};
+    ///
+    /// use mea::rwlock::OwnedMappedRwLockReadGuard;
+    /// use mea::rwlock::OwnedRwLockReadGuard;
+    /// use mea::rwlock::RwLock;
     ///
     /// #[derive(Debug)]
     /// struct ServerStats {
@@ -199,22 +206,27 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockReadGuard<T, U> {
         OwnedMappedRwLockReadGuard::new(d, lock)
     }
 
-    /// Attempts to make a new [`OwnedMappedRwLockReadGuard`] for a component of the locked data. The
-    /// original guard is returned if the closure returns `None`.
+    /// Attempts to make a new [`OwnedMappedRwLockReadGuard`] for a component of the locked data.
+    /// The original guard is returned if the closure returns `None`.
     ///
-    /// This operation cannot fail as the `OwnedMappedRwLockReadGuard` passed in already locked the rwlock.
+    /// This operation cannot fail as the `OwnedMappedRwLockReadGuard` passed in already locked the
+    /// rwlock.
     ///
-    /// This is an associated function that needs to be used as `OwnedMappedRwLockReadGuard::try_map(...)`. A
-    /// method would interfere with methods of the same name on the contents of the locked data.
+    /// This is an associated function that needs to be used as
+    /// `OwnedMappedRwLockReadGuard::filter_map(...)`. A method would interfere with methods of the
+    /// same name on the contents of the locked data.
     ///
     /// # Examples
     ///
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use std::sync::Arc;
-    /// use mea::rwlock::{RwLock, OwnedRwLockReadGuard, OwnedMappedRwLockReadGuard};
     /// use std::collections::HashMap;
+    /// use std::sync::Arc;
+    ///
+    /// use mea::rwlock::OwnedMappedRwLockReadGuard;
+    /// use mea::rwlock::OwnedRwLockReadGuard;
+    /// use mea::rwlock::RwLock;
     ///
     /// #[derive(Debug)]
     /// struct Cache {
@@ -234,10 +246,13 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockReadGuard<T, U> {
     /// }
     ///
     /// let mut entries = HashMap::new();
-    /// entries.insert("key1".to_owned(), CacheEntry { 
-    ///     data: "cached_data".to_owned(),
-    ///     metadata: Some("important".to_owned()),
-    /// });
+    /// entries.insert(
+    ///     "key1".to_owned(),
+    ///     CacheEntry {
+    ///         data: "cached_data".to_owned(),
+    ///         metadata: Some("important".to_owned()),
+    ///     },
+    /// );
     ///
     /// let cache = Cache {
     ///     entries,
@@ -248,19 +263,17 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockReadGuard<T, U> {
     /// let guard = rwlock.read_owned().await;
     ///
     /// // Map to a specific cache entry for cross-task reading
-    /// let entry_guard = OwnedRwLockReadGuard::map(guard, |cache| 
-    ///     cache.entries.get("key1").unwrap()
-    /// );
+    /// let entry_guard = OwnedRwLockReadGuard::map(guard, |cache| cache.entries.get("key1").unwrap());
     ///
     /// // Try to map to the metadata if it exists
-    /// let metadata_guard = OwnedMappedRwLockReadGuard::try_map(entry_guard, |entry| {
-    ///     entry.metadata.as_ref()
-    /// }).expect("entry should have metadata");
+    /// let metadata_guard =
+    ///     OwnedMappedRwLockReadGuard::filter_map(entry_guard, |entry| entry.metadata.as_ref())
+    ///         .expect("entry should have metadata");
     ///
     /// assert_eq!(&*metadata_guard, "important");
     /// # }
     /// ```
-    pub fn try_map<V, F>(orig: Self, f: F) -> Result<OwnedMappedRwLockReadGuard<T, V>, Self>
+    pub fn filter_map<V, F>(orig: Self, f: F) -> Result<OwnedMappedRwLockReadGuard<T, V>, Self>
     where
         F: FnOnce(&U) -> Option<&V>,
         V: ?Sized,

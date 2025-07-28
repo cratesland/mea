@@ -15,20 +15,22 @@
 use std::fmt;
 use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
+use std::ops::DerefMut;
 use std::ptr::NonNull;
 use std::sync::Arc;
 
 use crate::rwlock::RwLock;
 
-/// Owned RAII structure used to release the exclusive write access of a lock when dropped, for a mapped component of the locked data.
+/// Owned RAII structure used to release the exclusive write access of a lock when dropped, for a
+/// mapped component of the locked data.
 ///
 /// This guard is only available from a [`RwLock`] that is wrapped in an [`Arc`]. It is similar to
 /// [`MappedRwLockWriteGuard`], except that rather than borrowing the `RwLock`, it clones the `Arc`,
 /// incrementing the reference count. This means that unlike `MappedRwLockWriteGuard`, it will have
 /// the `'static` lifetime.
 ///
-/// As long as you have this guard, you have exclusive write access to the underlying `T`. The guard 
+/// As long as you have this guard, you have exclusive write access to the underlying `T`. The guard
 /// internally keeps an `Arc` reference to the original rwlock and tracks the number of permits
 /// acquired, so the original lock is maintained until this guard is dropped.
 ///
@@ -37,7 +39,7 @@ use crate::rwlock::RwLock;
 /// boundaries and shared between threads safely.
 ///
 /// [`map`]: crate::rwlock::OwnedRwLockWriteGuard::map
-/// [`try_map`]: crate::rwlock::OwnedRwLockWriteGuard::try_map
+/// [`filter_map`]: crate::rwlock::OwnedRwLockWriteGuard::filter_map
 /// [`OwnedRwLockWriteGuard`]: crate::rwlock::OwnedRwLockWriteGuard
 /// [`MappedRwLockWriteGuard`]: crate::rwlock::MappedRwLockWriteGuard
 /// [`RwLock`]: crate::rwlock::RwLock
@@ -50,7 +52,9 @@ use crate::rwlock::RwLock;
 /// # #[tokio::main]
 /// # async fn main() {
 /// use std::sync::Arc;
-/// use mea::rwlock::{RwLock, OwnedRwLockWriteGuard};
+///
+/// use mea::rwlock::OwnedRwLockWriteGuard;
+/// use mea::rwlock::RwLock;
 ///
 /// #[derive(Debug)]
 /// struct User {
@@ -100,11 +104,7 @@ unsafe impl<T: ?Sized + Send + Sync, U: ?Sized + Sync> Sync for OwnedMappedRwLoc
 unsafe impl<T: ?Sized + Send + Sync, U: ?Sized + Send> Send for OwnedMappedRwLockWriteGuard<T, U> {}
 
 impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockWriteGuard<T, U> {
-    pub(crate) fn new(
-        d: NonNull<U>,
-        lock: Arc<RwLock<T>>,
-        permits_acquired: usize,
-    ) -> Self {
+    pub(crate) fn new(d: NonNull<U>, lock: Arc<RwLock<T>>, permits_acquired: usize) -> Self {
         Self {
             d,
             lock,
@@ -149,10 +149,12 @@ impl<T: ?Sized, U: ?Sized> DerefMut for OwnedMappedRwLockWriteGuard<T, U> {
 impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockWriteGuard<T, U> {
     /// Makes a new [`OwnedMappedRwLockWriteGuard`] for a component of the locked data.
     ///
-    /// This operation cannot fail as the `OwnedMappedRwLockWriteGuard` passed in already locked the rwlock.
+    /// This operation cannot fail as the `OwnedMappedRwLockWriteGuard` passed in already locked the
+    /// rwlock.
     ///
-    /// This is an associated function that needs to be used as `OwnedMappedRwLockWriteGuard::map(...)`. A
-    /// method would interfere with methods of the same name on the contents of the locked data.
+    /// This is an associated function that needs to be used as
+    /// `OwnedMappedRwLockWriteGuard::map(...)`. A method would interfere with methods of the
+    /// same name on the contents of the locked data.
     ///
     /// # Examples
     ///
@@ -160,7 +162,10 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockWriteGuard<T, U> {
     /// # #[tokio::main]
     /// # async fn main() {
     /// use std::sync::Arc;
-    /// use mea::rwlock::{RwLock, OwnedRwLockWriteGuard, OwnedMappedRwLockWriteGuard};
+    ///
+    /// use mea::rwlock::OwnedMappedRwLockWriteGuard;
+    /// use mea::rwlock::OwnedRwLockWriteGuard;
+    /// use mea::rwlock::RwLock;
     ///
     /// #[derive(Debug)]
     /// struct User {
@@ -187,7 +192,8 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockWriteGuard<T, U> {
     /// // First map to the profile field
     /// let mut profile_guard = OwnedRwLockWriteGuard::map(guard, |user| &mut user.profile);
     /// // Then map to the email field specifically
-    /// let mut email_guard = OwnedMappedRwLockWriteGuard::map(profile_guard, |profile| &mut profile.email);
+    /// let mut email_guard =
+    ///     OwnedMappedRwLockWriteGuard::map(profile_guard, |profile| &mut profile.email);
     ///
     /// *email_guard = "newemail@example.com".to_owned();
     /// assert_eq!(&*email_guard, "newemail@example.com");
@@ -199,8 +205,8 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockWriteGuard<T, U> {
         V: ?Sized,
     {
         // SAFETY: orig.d is a valid NonNull<U> pointer that was created from a valid reference
-        // when the original OwnedMappedRwLockWriteGuard was constructed. The guard guarantees exclusive
-        // access to the data through the rwlock, so dereferencing is safe.
+        // when the original OwnedMappedRwLockWriteGuard was constructed. The guard guarantees
+        // exclusive access to the data through the rwlock, so dereferencing is safe.
         let d = NonNull::from(f(unsafe { orig.d.as_mut() }));
         let permits_acquired = orig.permits_acquired;
         let orig = ManuallyDrop::new(orig);
@@ -209,13 +215,15 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockWriteGuard<T, U> {
         OwnedMappedRwLockWriteGuard::new(d, lock, permits_acquired)
     }
 
-    /// Attempts to make a new [`OwnedMappedRwLockWriteGuard`] for a component of the locked data. The
-    /// original guard is returned if the closure returns `None`.
+    /// Attempts to make a new [`OwnedMappedRwLockWriteGuard`] for a component of the locked data.
+    /// The original guard is returned if the closure returns `None`.
     ///
-    /// This operation cannot fail as the `OwnedMappedRwLockWriteGuard` passed in already locked the rwlock.
+    /// This operation cannot fail as the `OwnedMappedRwLockWriteGuard` passed in already locked the
+    /// rwlock.
     ///
-    /// This is an associated function that needs to be used as `OwnedMappedRwLockWriteGuard::try_map(...)`. A
-    /// method would interfere with methods of the same name on the contents of the locked data.
+    /// This is an associated function that needs to be used as
+    /// `OwnedMappedRwLockWriteGuard::filter_map(...)`. A method would interfere with methods of
+    /// the same name on the contents of the locked data.
     ///
     /// # Examples
     ///
@@ -223,7 +231,10 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockWriteGuard<T, U> {
     /// # #[tokio::main]
     /// # async fn main() {
     /// use std::sync::Arc;
-    /// use mea::rwlock::{RwLock, OwnedRwLockWriteGuard, OwnedMappedRwLockWriteGuard};
+    ///
+    /// use mea::rwlock::OwnedMappedRwLockWriteGuard;
+    /// use mea::rwlock::OwnedRwLockWriteGuard;
+    /// use mea::rwlock::RwLock;
     ///
     /// #[derive(Debug)]
     /// struct AppState {
@@ -253,10 +264,11 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockWriteGuard<T, U> {
     /// let metrics_opt_guard = OwnedRwLockWriteGuard::map(guard, |state| &mut state.metrics);
     ///
     /// // Now, on the mapped guard, try to map into the Option.
-    /// // This is the correct usage of OwnedMappedRwLockWriteGuard::try_map.
-    /// let metrics_result = OwnedMappedRwLockWriteGuard::try_map(metrics_opt_guard, |metrics_opt| {
-    ///     metrics_opt.as_mut()
-    /// });
+    /// // This is the correct usage of OwnedMappedRwLockWriteGuard::filter_map.
+    /// let metrics_result =
+    ///     OwnedMappedRwLockWriteGuard::filter_map(metrics_opt_guard, |metrics_opt| {
+    ///         metrics_opt.as_mut()
+    ///     });
     ///
     /// match metrics_result {
     ///     Ok(mut metrics_guard) => {
@@ -272,14 +284,14 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockWriteGuard<T, U> {
     /// }
     /// # }
     /// ```
-    pub fn try_map<V, F>(mut orig: Self, f: F) -> Result<OwnedMappedRwLockWriteGuard<T, V>, Self>
+    pub fn filter_map<V, F>(mut orig: Self, f: F) -> Result<OwnedMappedRwLockWriteGuard<T, V>, Self>
     where
         F: FnOnce(&mut U) -> Option<&mut V>,
         V: ?Sized,
     {
         // SAFETY: orig.d is a valid NonNull<U> pointer that was created from a valid reference
-        // when the original OwnedMappedRwLockWriteGuard was constructed. The guard guarantees exclusive
-        // access to the data through the rwlock, so dereferencing is safe.
+        // when the original OwnedMappedRwLockWriteGuard was constructed. The guard guarantees
+        // exclusive access to the data through the rwlock, so dereferencing is safe.
         match f(unsafe { orig.d.as_mut() }) {
             Some(d) => {
                 let d = NonNull::from(d);

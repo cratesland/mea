@@ -83,7 +83,6 @@ fn test_with_max_readers() {
     assert_eq!(*r, 20);
 }
 
-
 #[tokio::test]
 async fn test_stress_concurrent_readers_writers() {
     // Test concurrent readers and writers with RwLock
@@ -118,25 +117,45 @@ async fn test_stress_concurrent_readers_writers() {
 
     for handle in reader_results {
         let (reader_id, value) = handle.await.unwrap();
-        assert!(value >= 0 && value <= 10,
-                "Reader {} saw invalid value: {}", reader_id, value);
+        assert!(
+            (0..=10).contains(&value),
+            "Reader {} saw invalid value: {}",
+            reader_id,
+            value
+        );
     }
 
     let mut writer_values = Vec::new();
     for handle in writer_results {
         let (writer_id, old_value, new_value) = handle.await.unwrap();
-        assert_eq!(new_value, old_value + 1,
-                   "Writer {} increment failed: {} -> {}", writer_id, old_value, new_value);
+        assert_eq!(
+            new_value,
+            old_value + 1,
+            "Writer {} increment failed: {} -> {}",
+            writer_id,
+            old_value,
+            new_value
+        );
         writer_values.push((old_value, new_value));
     }
 
     let final_guard = rwlock.read().await;
-    assert_eq!(*final_guard, 10, "Final value should be 10 after 10 increments");
+    assert_eq!(
+        *final_guard, 10,
+        "Final value should be 10 after 10 increments"
+    );
 
     writer_values.sort_by_key(|(old, _)| *old);
     for (i, (old_value, new_value)) in writer_values.iter().enumerate() {
-        assert_eq!(*old_value, i as i32, "Writer operations should be sequential");
-        assert_eq!(*new_value, (i + 1) as i32, "Each increment should be atomic");
+        assert_eq!(
+            *old_value, i as i32,
+            "Writer operations should be sequential"
+        );
+        assert_eq!(
+            *new_value,
+            (i + 1) as i32,
+            "Each increment should be atomic"
+        );
     }
 }
 
@@ -312,7 +331,7 @@ async fn test_owned_mapped_write_guard_panic_safety() {
 #[tokio::test]
 async fn test_memory_ordering_correctness() {
     // Test that rwlock provides proper memory ordering guarantees
-    // When one task modifies data under rwlock protection, 
+    // When one task modifies data under rwlock protection,
     // another task should see the modification after acquiring the lock
     let rwlock = Arc::new(RwLock::new(vec![1, 2, 3]));
     let rwlock_clone = rwlock.clone();
@@ -334,30 +353,35 @@ async fn test_memory_ordering_correctness() {
 async fn test_rwlock_debug_when_locked() {
     let rwlock = Arc::new(RwLock::new(78));
 
-    let rwlock_debug_unlocked = format!("{:?}", rwlock);
-    assert!(rwlock_debug_unlocked.contains("78"),
-            "RwLock Debug should show value when unlocked, got: {}", rwlock_debug_unlocked);
+    let rwlock_debug_unlocked = format!("{rwlock:?}");
+    assert!(
+        rwlock_debug_unlocked.contains("78"),
+        "RwLock Debug should show value when unlocked, got: {rwlock_debug_unlocked}"
+    );
 
     let write_guard = rwlock.write().await;
-    let rwlock_debug_write = format!("{:?}", rwlock);
-    assert!(rwlock_debug_write.contains("<locked>"),
-            "RwLock Debug should show <locked> when write lock is held, got: {}", rwlock_debug_write);
+    let rwlock_debug_write = format!("{rwlock:?}");
+    assert!(
+        rwlock_debug_write.contains("<locked>"),
+        "RwLock Debug should show <locked> when write lock is held, got: {rwlock_debug_write}"
+    );
     drop(write_guard);
 
     let read_guard = rwlock.read().await;
-    let rwlock_debug_read = format!("{:?}", rwlock);
+    let rwlock_debug_read = format!("{rwlock:?}");
 
     let shows_value = rwlock_debug_read.contains("78");
     let shows_locked = rwlock_debug_read.contains("<locked>");
     assert!(shows_value || shows_locked,
-            "RwLock Debug with read lock should show either value or <locked>, got: {}",
-            rwlock_debug_read);
+            "RwLock Debug with read lock should show either value or <locked>, got: {rwlock_debug_read}");
 
     drop(read_guard);
 
-    let rwlock_debug_final = format!("{:?}", rwlock);
-    assert!(rwlock_debug_final.contains("78"),
-            "RwLock Debug should show value when all locks are released, got: {}", rwlock_debug_final);
+    let rwlock_debug_final = format!("{rwlock:?}");
+    assert!(
+        rwlock_debug_final.contains("78"),
+        "RwLock Debug should show value when all locks are released, got: {rwlock_debug_final}"
+    );
 }
 
 #[tokio::test]
@@ -368,15 +392,15 @@ async fn test_rwlock_zst() {
     let rwlock_clone = rwlock.clone();
     let handle = tokio::spawn(async move {
         let guard = rwlock_clone.read().await;
-        assert_eq!(*guard, ());
+        *guard;
     });
 
     handle.await.unwrap();
 
     let guard1 = rwlock.read().await;
     let guard2 = rwlock.clone().read_owned().await;
-    assert_eq!(*guard1, ());
-    assert_eq!(*guard2, ());
+    *guard1;
+    *guard2;
 
     assert!(rwlock.try_write().is_none());
 
@@ -388,9 +412,9 @@ async fn test_rwlock_zst() {
     drop(write_guard);
 
     let try_write_guard = rwlock.try_write().unwrap();
-    assert_eq!(*try_write_guard, ());
+    *try_write_guard;
     drop(try_write_guard);
 
     let guard = rwlock.try_read().unwrap();
-    assert_eq!(*guard, ());
+    *guard;
 }

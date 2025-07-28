@@ -14,18 +14,20 @@
 
 use std::fmt;
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
+use std::ops::DerefMut;
 use std::ptr::NonNull;
 
 use crate::internal;
 
-/// RAII structure used to release the exclusive write access of a lock when dropped, for a mapped component of the locked data.
+/// RAII structure used to release the exclusive write access of a lock when dropped, for a mapped
+/// component of the locked data.
 ///
-/// This structure is created by the [`map`] and [`try_map`] methods on [`RwLockWriteGuard`]. It allows you to 
-/// hold a write lock on a subfield of the protected data, enabling more fine-grained access control while 
-/// maintaining the same locking semantics.
+/// This structure is created by the [`map`] and [`filter_map`] methods on [`RwLockWriteGuard`]. It
+/// allows you to hold a write lock on a subfield of the protected data, enabling more fine-grained
+/// access control while maintaining the same locking semantics.
 ///
-/// As long as you have this guard, you have exclusive write access to the underlying `T`. The guard 
+/// As long as you have this guard, you have exclusive write access to the underlying `T`. The guard
 /// internally keeps a reference to the original rwlock's semaphore and tracks the number of permits
 /// acquired, so the original lock is maintained until this guard is dropped.
 ///
@@ -34,7 +36,7 @@ use crate::internal;
 /// allowing it to be used across task boundaries and shared between threads safely.
 ///
 /// [`map`]: crate::rwlock::RwLockWriteGuard::map
-/// [`try_map`]: crate::rwlock::RwLockWriteGuard::try_map
+/// [`filter_map`]: crate::rwlock::RwLockWriteGuard::filter_map
 /// [`RwLockWriteGuard`]: crate::rwlock::RwLockWriteGuard
 ///
 /// See the [module level documentation](crate::rwlock) for more.
@@ -44,7 +46,8 @@ use crate::internal;
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use mea::rwlock::{RwLock, RwLockWriteGuard};
+/// use mea::rwlock::RwLock;
+/// use mea::rwlock::RwLockWriteGuard;
 ///
 /// #[derive(Debug)]
 /// struct User {
@@ -140,17 +143,21 @@ impl<T: ?Sized> DerefMut for MappedRwLockWriteGuard<'_, T> {
 impl<'a, T: ?Sized> MappedRwLockWriteGuard<'a, T> {
     /// Makes a new [`MappedRwLockWriteGuard`] for a component of the locked data.
     ///
-    /// This operation cannot fail as the `MappedRwLockWriteGuard` passed in already locked the rwlock.
+    /// This operation cannot fail as the `MappedRwLockWriteGuard` passed in already locked the
+    /// rwlock.
     ///
-    /// This is an associated function that needs to be used as `MappedRwLockWriteGuard::map(...)`. A
-    /// method would interfere with methods of the same name on the contents of the locked data.
+    /// This is an associated function that needs to be used as `MappedRwLockWriteGuard::map(...)`.
+    /// A method would interfere with methods of the same name on the contents of the locked
+    /// data.
     ///
     /// # Examples
     ///
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use mea::rwlock::{RwLock, RwLockWriteGuard, MappedRwLockWriteGuard};
+    /// use mea::rwlock::MappedRwLockWriteGuard;
+    /// use mea::rwlock::RwLock;
+    /// use mea::rwlock::RwLockWriteGuard;
     ///
     /// #[derive(Debug)]
     /// struct User {
@@ -200,17 +207,21 @@ impl<'a, T: ?Sized> MappedRwLockWriteGuard<'a, T> {
     /// Attempts to make a new [`MappedRwLockWriteGuard`] for a component of the locked data. The
     /// original guard is returned if the closure returns `None`.
     ///
-    /// This operation cannot fail as the `MappedRwLockWriteGuard` passed in already locked the rwlock.
+    /// This operation cannot fail as the `MappedRwLockWriteGuard` passed in already locked the
+    /// rwlock.
     ///
-    /// This is an associated function that needs to be used as `MappedRwLockWriteGuard::try_map(...)`. A
-    /// method would interfere with methods of the same name on the contents of the locked data.
+    /// This is an associated function that needs to be used as
+    /// `MappedRwLockWriteGuard::filter_map(...)`. A method would interfere with methods of the
+    /// same name on the contents of the locked data.
     ///
     /// # Examples
     ///
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use mea::rwlock::{RwLock, RwLockWriteGuard, MappedRwLockWriteGuard};
+    /// use mea::rwlock::MappedRwLockWriteGuard;
+    /// use mea::rwlock::RwLock;
+    /// use mea::rwlock::RwLockWriteGuard;
     ///
     /// #[derive(Debug)]
     /// struct Document {
@@ -241,7 +252,7 @@ impl<'a, T: ?Sized> MappedRwLockWriteGuard<'a, T> {
     /// let meta_guard = RwLockWriteGuard::map(guard, |doc| &mut doc.metadata);
     ///
     /// // Try to map to the version number if metadata and version both exist
-    /// let version_result = MappedRwLockWriteGuard::try_map(meta_guard, |meta_opt| {
+    /// let version_result = MappedRwLockWriteGuard::filter_map(meta_guard, |meta_opt| {
     ///     meta_opt.as_mut()?.version.as_mut()
     /// });
     /// match version_result {
@@ -256,7 +267,7 @@ impl<'a, T: ?Sized> MappedRwLockWriteGuard<'a, T> {
     /// }
     /// # }
     /// ```
-    pub fn try_map<U, F>(mut orig: Self, f: F) -> Result<MappedRwLockWriteGuard<'a, U>, Self>
+    pub fn filter_map<U, F>(mut orig: Self, f: F) -> Result<MappedRwLockWriteGuard<'a, U>, Self>
     where
         F: FnOnce(&mut T) -> Option<&mut U>,
         U: ?Sized,

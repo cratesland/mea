@@ -47,7 +47,7 @@
 //! }
 //!
 //! let final_value = mutex.lock().await;
-//! assert_eq!(*final_value, 3); // 0 + 0 + 1 + 2
+//! assert_eq!(*final_value, 3); // 0 + 1 + 2
 //! #  }
 //! ```
 //!
@@ -176,7 +176,7 @@ impl<T: ?Sized> Mutex<T> {
     /// use mea::mutex::Mutex;
     ///
     /// let mutex = Mutex::new(1);
-    /// let mut guard = mutex.try_lock().expect("mutex should be available");
+    /// let mut guard = mutex.try_lock().expect("mutex is locked");
     /// *guard += 1;
     /// assert_eq!(2, *guard);
     /// ```
@@ -242,7 +242,7 @@ impl<T: ?Sized> Mutex<T> {
     /// use mea::mutex::Mutex;
     ///
     /// let mutex = Arc::new(Mutex::new(1));
-    /// let mut guard = mutex.clone().try_lock_owned().expect("mutex should be available");
+    /// let mut guard = mutex.clone().try_lock_owned().expect("mutex is locked");
     /// *guard += 1;
     /// assert_eq!(2, *guard);
     /// ```
@@ -337,7 +337,8 @@ impl<'a, T: ?Sized> MutexGuard<'a, T> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use mea::mutex::{Mutex, MutexGuard};
+    /// use mea::mutex::Mutex;
+    /// use mea::mutex::MutexGuard;
     ///
     /// #[derive(Debug)]
     /// struct User {
@@ -386,7 +387,7 @@ impl<'a, T: ?Sized> MutexGuard<'a, T> {
     ///
     /// This operation cannot fail as the `MutexGuard` passed in already locked the mutex.
     ///
-    /// This is an associated function that needs to be used as `MutexGuard::try_map(...)`. A
+    /// This is an associated function that needs to be used as `MutexGuard::filter_map(...)`. A
     /// method would interfere with methods of the same name on the contents of the locked data.
     ///
     /// # Examples
@@ -394,7 +395,8 @@ impl<'a, T: ?Sized> MutexGuard<'a, T> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use mea::mutex::{Mutex, MutexGuard};
+    /// use mea::mutex::Mutex;
+    /// use mea::mutex::MutexGuard;
     ///
     /// #[derive(Debug)]
     /// struct Database {
@@ -412,18 +414,19 @@ impl<'a, T: ?Sized> MutexGuard<'a, T> {
     /// let guard = mutex.lock().await;
     ///
     /// // Try to map to admin user's email if admin exists
-    /// let admin_email_guard = MutexGuard::try_map(guard, |db| {
+    /// let admin_email_guard = MutexGuard::filter_map(guard, |db| {
     ///     if let Some(admin_id) = db.admin_user_id {
     ///         db.users.get_mut(&admin_id)
     ///     } else {
     ///         None
     ///     }
-    /// }).expect("admin user should exist");
+    /// })
+    /// .expect("admin user should exist");
     ///
     /// assert_eq!(&*admin_email_guard, "admin@example.com");
     /// # }
     /// ```
-    pub fn try_map<U, F>(mut orig: Self, f: F) -> Result<MappedMutexGuard<'a, U>, Self>
+    pub fn filter_map<U, F>(mut orig: Self, f: F) -> Result<MappedMutexGuard<'a, U>, Self>
     where
         F: FnOnce(&mut T) -> Option<&mut U>,
         U: ?Sized,
@@ -513,7 +516,9 @@ impl<T: ?Sized> OwnedMutexGuard<T> {
     /// # #[tokio::main]
     /// # async fn main() {
     /// use std::sync::Arc;
-    /// use mea::mutex::{Mutex, OwnedMutexGuard};
+    ///
+    /// use mea::mutex::Mutex;
+    /// use mea::mutex::OwnedMutexGuard;
     ///
     /// struct Config {
     ///     name: String,
@@ -556,8 +561,9 @@ impl<T: ?Sized> OwnedMutexGuard<T> {
     ///
     /// This operation cannot fail as the `OwnedMutexGuard` passed in already locked the mutex.
     ///
-    /// This is an associated function that needs to be used as `OwnedMutexGuard::try_map(...)`. A
-    /// method would interfere with methods of the same name on the contents of the locked data.
+    /// This is an associated function that needs to be used as `OwnedMutexGuard::filter_map(...)`.
+    /// A method would interfere with methods of the same name on the contents of the locked
+    /// data.
     ///
     /// # Examples
     ///
@@ -565,21 +571,22 @@ impl<T: ?Sized> OwnedMutexGuard<T> {
     /// # #[tokio::main]
     /// # async fn main() {
     /// use std::sync::Arc;
-    /// use mea::mutex::{Mutex, OwnedMutexGuard};
+    ///
+    /// use mea::mutex::Mutex;
+    /// use mea::mutex::OwnedMutexGuard;
     ///
     /// let data = vec![1, 2, 3, 4, 5];
     /// let mutex = Arc::new(Mutex::new(data));
     /// let guard = mutex.clone().lock_owned().await;
     ///
     /// // Map to the first element
-    /// let first_guard = OwnedMutexGuard::try_map(guard, |vec| {
-    ///     vec.get_mut(0)
-    /// }).expect("vec should not be empty");
+    /// let first_guard =
+    ///     OwnedMutexGuard::filter_map(guard, |vec| vec.get_mut(0)).expect("vec should not be empty");
     ///
     /// assert_eq!(*first_guard, 1);
     /// # }
     /// ```
-    pub fn try_map<U, F>(mut orig: Self, f: F) -> Result<OwnedMappedMutexGuard<T, U>, Self>
+    pub fn filter_map<U, F>(mut orig: Self, f: F) -> Result<OwnedMappedMutexGuard<T, U>, Self>
     where
         F: FnOnce(&mut T) -> Option<&mut U>,
         U: ?Sized,
@@ -603,29 +610,33 @@ impl<T: ?Sized> OwnedMutexGuard<T> {
     }
 }
 
-/// RAII structure used to release the exclusive lock on a mutex when dropped, for a mapped component of the locked data.
+/// RAII structure used to release the exclusive lock on a mutex when dropped, for a mapped
+/// component of the locked data.
 ///
-/// This structure is created by the [`map`] and [`try_map`] methods on [`MutexGuard`]. It allows you to 
-/// hold a lock on a subfield of the protected data, enabling more fine-grained access control while 
-/// maintaining the same locking semantics.
+/// This structure is created by the [`map`] and [`filter_map`] methods on [`MutexGuard`]. It allows
+/// you to hold a lock on a subfield of the protected data, enabling more fine-grained access
+/// control while maintaining the same locking semantics.
 ///
-/// As long as you have this guard, you have exclusive access to the underlying `T`. The guard 
-/// internally keeps a reference to the original mutex's semaphore, so the original lock is 
+/// As long as you have this guard, you have exclusive access to the underlying `T`. The guard
+/// internally keeps a reference to the original mutex's semaphore, so the original lock is
 /// maintained until this guard is dropped.
 ///
 /// `MappedMutexGuard` implements [`Send`] and [`Sync`]
 /// when the underlying data type supports these traits, allowing it to be used across task
 /// boundaries and shared between threads safely.
 ///
+/// See the [module level documentation](self) for more.
+///
 /// [`map`]: MutexGuard::map
-/// [`try_map`]: MutexGuard::try_map
+/// [`filter_map`]: MutexGuard::filter_map
 ///
 /// # Examples
 ///
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use mea::mutex::{Mutex, MutexGuard};
+/// use mea::mutex::Mutex;
+/// use mea::mutex::MutexGuard;
 ///
 /// #[derive(Debug)]
 /// struct User {
@@ -655,8 +666,6 @@ impl<T: ?Sized> OwnedMutexGuard<T> {
 /// assert_eq!(profile_guard.email, "user@example.com");
 /// # }
 /// ```
-///
-/// See the [module level documentation](self) for more.
 #[must_use = "if unused the Mutex will immediately unlock"]
 pub struct MappedMutexGuard<'a, T: ?Sized> {
     /// Non-null pointer to the mapped data
@@ -676,9 +685,6 @@ unsafe impl<T: ?Sized + Send> Send for MappedMutexGuard<'_, T> {}
 // Through &MappedMutexGuard, you can only get &T, so if T itself allows sharing references
 // across threads, then sharing MappedMutexGuard references is also safe.
 unsafe impl<T: ?Sized + Sync> Sync for MappedMutexGuard<'_, T> {}
-
-
-
 
 impl<T: ?Sized> Drop for MappedMutexGuard<'_, T> {
     fn drop(&mut self) {
@@ -726,7 +732,9 @@ impl<'a, T: ?Sized> MappedMutexGuard<'a, T> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use mea::mutex::{Mutex, MutexGuard, MappedMutexGuard};
+    /// use mea::mutex::MappedMutexGuard;
+    /// use mea::mutex::Mutex;
+    /// use mea::mutex::MutexGuard;
     ///
     /// #[derive(Debug)]
     /// struct User {
@@ -779,15 +787,18 @@ impl<'a, T: ?Sized> MappedMutexGuard<'a, T> {
     ///
     /// This operation cannot fail as the `MappedMutexGuard` passed in already locked the mutex.
     ///
-    /// This is an associated function that needs to be used as `MappedMutexGuard::try_map(...)`. A
-    /// method would interfere with methods of the same name on the contents of the locked data.
+    /// This is an associated function that needs to be used as `MappedMutexGuard::filter_map(...)`.
+    /// A method would interfere with methods of the same name on the contents of the locked
+    /// data.
     ///
     /// # Examples
     ///
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use mea::mutex::{Mutex, MutexGuard, MappedMutexGuard};
+    /// use mea::mutex::MappedMutexGuard;
+    /// use mea::mutex::Mutex;
+    /// use mea::mutex::MutexGuard;
     ///
     /// #[derive(Debug)]
     /// struct Data {
@@ -806,14 +817,13 @@ impl<'a, T: ?Sized> MappedMutexGuard<'a, T> {
     /// // First map to the value field
     /// let value_guard = MutexGuard::map(guard, |data| &mut data.value);
     /// // Then try to map to the inner string if it exists
-    /// let string_guard = MappedMutexGuard::try_map(value_guard, |opt| {
-    ///     opt.as_mut()
-    /// }).expect("value should exist");
+    /// let string_guard =
+    ///     MappedMutexGuard::filter_map(value_guard, |opt| opt.as_mut()).expect("value should exist");
     ///
     /// assert_eq!(&*string_guard, "hello");
     /// # }
     /// ```
-    pub fn try_map<U, F>(mut orig: Self, f: F) -> Result<MappedMutexGuard<'a, U>, Self>
+    pub fn filter_map<U, F>(mut orig: Self, f: F) -> Result<MappedMutexGuard<'a, U>, Self>
     where
         F: FnOnce(&mut T) -> Option<&mut U>,
         U: ?Sized,
@@ -841,8 +851,8 @@ impl<'a, T: ?Sized> MappedMutexGuard<'a, T> {
 /// incrementing the reference count. This means that unlike `MappedMutexGuard`, it will have
 /// the `'static` lifetime.
 ///
-/// This structure is created by the [`map`] and [`try_map`] methods on [`OwnedMutexGuard`]. 
-/// It allows you to hold a lock on a subfield of the protected data, enabling more fine-grained 
+/// This structure is created by the [`map`] and [`filter_map`] methods on [`OwnedMutexGuard`].
+/// It allows you to hold a lock on a subfield of the protected data, enabling more fine-grained
 /// access control while maintaining the same locking semantics.
 ///
 /// As long as you have this guard, you have exclusive access to the underlying `U`. The guard
@@ -855,7 +865,7 @@ impl<'a, T: ?Sized> MappedMutexGuard<'a, T> {
 /// See the [module level documentation](self) for more.
 ///
 /// [`map`]: OwnedMutexGuard::map
-/// [`try_map`]: OwnedMutexGuard::try_map
+/// [`filter_map`]: OwnedMutexGuard::filter_map
 ///
 /// # Examples
 ///
@@ -863,7 +873,9 @@ impl<'a, T: ?Sized> MappedMutexGuard<'a, T> {
 /// # #[tokio::main]
 /// # async fn main() {
 /// use std::sync::Arc;
-/// use mea::mutex::{Mutex, OwnedMutexGuard};
+///
+/// use mea::mutex::Mutex;
+/// use mea::mutex::OwnedMutexGuard;
 ///
 /// struct Data {
 ///     value: u32,
@@ -894,9 +906,9 @@ pub struct OwnedMappedMutexGuard<T: ?Sized, U: ?Sized> {
 // moved between threads at .await points.
 unsafe impl<T: ?Sized + Send, U: ?Sized + Send> Send for OwnedMappedMutexGuard<T, U> {}
 
-// SAFETY: OwnedMappedMutexGuard can be safely shared between threads (Sync) when T: Send + Sync and U: Send + Sync.
-// Through &OwnedMappedMutexGuard, you can only get &U, so if U itself allows sharing references
-// across threads, then sharing OwnedMappedMutexGuard references is also safe.
+// SAFETY: OwnedMappedMutexGuard can be safely shared between threads (Sync) when T: Send + Sync and
+// U: Send + Sync. Through &OwnedMappedMutexGuard, you can only get &U, so if U itself allows
+// sharing references across threads, then sharing OwnedMappedMutexGuard references is also safe.
 // We require T: Send + Sync for maximum safety and ecosystem compatibility.
 unsafe impl<T: ?Sized + Send + Sync, U: ?Sized + Send + Sync> Sync for OwnedMappedMutexGuard<T, U> {}
 
@@ -939,7 +951,8 @@ impl<T: ?Sized, U: ?Sized> DerefMut for OwnedMappedMutexGuard<T, U> {
 impl<T: ?Sized, U: ?Sized> OwnedMappedMutexGuard<T, U> {
     /// Makes a new [`OwnedMappedMutexGuard`] for a component of the locked data.
     ///
-    /// This operation cannot fail as the `OwnedMappedMutexGuard` passed in already locked the mutex.
+    /// This operation cannot fail as the `OwnedMappedMutexGuard` passed in already locked the
+    /// mutex.
     ///
     /// This is an associated function that needs to be used as `OwnedMappedMutexGuard::map(...)`. A
     /// method would interfere with methods of the same name on the contents of the locked data.
@@ -950,7 +963,10 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedMutexGuard<T, U> {
     /// # #[tokio::main]
     /// # async fn main() {
     /// use std::sync::Arc;
-    /// use mea::mutex::{Mutex, OwnedMutexGuard, OwnedMappedMutexGuard};
+    ///
+    /// use mea::mutex::Mutex;
+    /// use mea::mutex::OwnedMappedMutexGuard;
+    /// use mea::mutex::OwnedMutexGuard;
     ///
     /// #[derive(Debug)]
     /// struct Config {
@@ -996,10 +1012,12 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedMutexGuard<T, U> {
     /// Attempts to make a new [`OwnedMappedMutexGuard`] for a component of the locked data. The
     /// original guard is returned if the closure returns `None`.
     ///
-    /// This operation cannot fail as the `OwnedMappedMutexGuard` passed in already locked the mutex.
+    /// This operation cannot fail as the `OwnedMappedMutexGuard` passed in already locked the
+    /// mutex.
     ///
-    /// This is an associated function that needs to be used as `OwnedMappedMutexGuard::try_map(...)`. A
-    /// method would interfere with methods of the same name on the contents of the locked data.
+    /// This is an associated function that needs to be used as
+    /// `OwnedMappedMutexGuard::filter_map(...)`. A method would interfere with methods of the same
+    /// name on the contents of the locked data.
     ///
     /// # Examples
     ///
@@ -1007,7 +1025,10 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedMutexGuard<T, U> {
     /// # #[tokio::main]
     /// # async fn main() {
     /// use std::sync::Arc;
-    /// use mea::mutex::{Mutex, OwnedMutexGuard, OwnedMappedMutexGuard};
+    ///
+    /// use mea::mutex::Mutex;
+    /// use mea::mutex::OwnedMappedMutexGuard;
+    /// use mea::mutex::OwnedMutexGuard;
     ///
     /// #[derive(Debug)]
     /// struct Node {
@@ -1032,19 +1053,20 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedMutexGuard<T, U> {
     /// // First map to left child
     /// let left_guard = OwnedMutexGuard::map(guard, |node| &mut node.left);
     /// // Try to access the left child if it exists
-    /// let child_guard = OwnedMappedMutexGuard::try_map(left_guard, |left| {
+    /// let child_guard = OwnedMappedMutexGuard::filter_map(left_guard, |left| {
     ///     left.as_mut().map(|boxed| boxed.as_mut())
-    /// }).expect("left child should exist");
+    /// })
+    /// .expect("left child should exist");
     ///
     /// assert_eq!(child_guard.value, 5);
     /// # }
     /// ```
-    pub fn try_map<V, F>(mut orig: Self, f: F) -> Result<OwnedMappedMutexGuard<T, V>, Self>
+    pub fn filter_map<V, F>(mut orig: Self, f: F) -> Result<OwnedMappedMutexGuard<T, V>, Self>
     where
         F: FnOnce(&mut U) -> Option<&mut V>,
         V: ?Sized,
     {
-        // Use DerefMut to maintain consistency with other try_map implementations
+        // Use DerefMut to maintain consistency with other filter_map implementations
         match f(&mut *orig) {
             Some(d) => {
                 let d = NonNull::from(d);

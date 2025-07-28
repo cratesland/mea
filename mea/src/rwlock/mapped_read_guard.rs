@@ -19,22 +19,23 @@ use std::ptr::NonNull;
 
 use crate::internal;
 
-/// RAII structure used to release the shared read access of a lock when dropped, for a mapped component of the locked data.
+/// RAII structure used to release the shared read access of a lock when dropped, for a mapped
+/// component of the locked data.
 ///
-/// This structure is created by the [`map`] and [`try_map`] methods on [`RwLockReadGuard`]. It allows you to 
-/// hold a read lock on a subfield of the protected data, enabling more fine-grained access control while 
-/// maintaining the same locking semantics.
+/// This structure is created by the [`map`] and [`filter_map`] methods on [`RwLockReadGuard`]. It
+/// allows you to hold a read lock on a subfield of the protected data, enabling more fine-grained
+/// access control while maintaining the same locking semantics.
 ///
-/// As long as you have this guard, you have shared read access to the underlying `T`. The guard 
-/// internally keeps a reference to the original rwlock's semaphore, so the original lock is 
+/// As long as you have this guard, you have shared read access to the underlying `T`. The guard
+/// internally keeps a reference to the original rwlock's semaphore, so the original lock is
 /// maintained until this guard is dropped.
 ///
-/// `MappedRwLockReadGuard` implements [`Send`] and [`Sync`] when `T: Sync`, allowing it to be 
-/// used across task boundaries and shared between threads safely. Note that [`Send`] does not 
+/// `MappedRwLockReadGuard` implements [`Send`] and [`Sync`] when `T: Sync`, allowing it to be
+/// used across task boundaries and shared between threads safely. Note that [`Send`] does not
 /// require `T: Send` because the read guard only borrows the data rather than owning it.
 ///
 /// [`map`]: crate::rwlock::RwLockReadGuard::map
-/// [`try_map`]: crate::rwlock::RwLockReadGuard::try_map
+/// [`filter_map`]: crate::rwlock::RwLockReadGuard::filter_map
 /// [`RwLockReadGuard`]: crate::rwlock::RwLockReadGuard
 ///
 /// See the [module level documentation](crate::rwlock) for more.
@@ -44,7 +45,8 @@ use crate::internal;
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-/// use mea::rwlock::{RwLock, RwLockReadGuard};
+/// use mea::rwlock::RwLock;
+/// use mea::rwlock::RwLockReadGuard;
 ///
 /// #[derive(Debug)]
 /// struct User {
@@ -128,12 +130,11 @@ impl<T: ?Sized> Deref for MappedRwLockReadGuard<'_, T> {
     }
 }
 
-
-
 impl<'a, T: ?Sized> MappedRwLockReadGuard<'a, T> {
     /// Makes a new [`MappedRwLockReadGuard`] for a component of the locked data.
     ///
-    /// This operation cannot fail as the `MappedRwLockReadGuard` passed in already locked the rwlock.
+    /// This operation cannot fail as the `MappedRwLockReadGuard` passed in already locked the
+    /// rwlock.
     ///
     /// This is an associated function that needs to be used as `MappedRwLockReadGuard::map(...)`. A
     /// method would interfere with methods of the same name on the contents of the locked data.
@@ -143,7 +144,9 @@ impl<'a, T: ?Sized> MappedRwLockReadGuard<'a, T> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use mea::rwlock::{RwLock, RwLockReadGuard, MappedRwLockReadGuard};
+    /// use mea::rwlock::MappedRwLockReadGuard;
+    /// use mea::rwlock::RwLock;
+    /// use mea::rwlock::RwLockReadGuard;
     ///
     /// #[derive(Debug)]
     /// struct User {
@@ -191,17 +194,21 @@ impl<'a, T: ?Sized> MappedRwLockReadGuard<'a, T> {
     /// Attempts to make a new [`MappedRwLockReadGuard`] for a component of the locked data. The
     /// original guard is returned if the closure returns `None`.
     ///
-    /// This operation cannot fail as the `MappedRwLockReadGuard` passed in already locked the rwlock.
+    /// This operation cannot fail as the `MappedRwLockReadGuard` passed in already locked the
+    /// rwlock.
     ///
-    /// This is an associated function that needs to be used as `MappedRwLockReadGuard::try_map(...)`. A
-    /// method would interfere with methods of the same name on the contents of the locked data.
+    /// This is an associated function that needs to be used as
+    /// `MappedRwLockReadGuard::filter_map(...)`. A method would interfere with methods of the same
+    /// name on the contents of the locked data.
     ///
     /// # Examples
     ///
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use mea::rwlock::{RwLock, RwLockReadGuard, MappedRwLockReadGuard};
+    /// use mea::rwlock::MappedRwLockReadGuard;
+    /// use mea::rwlock::RwLock;
+    /// use mea::rwlock::RwLockReadGuard;
     ///
     /// #[derive(Debug)]
     /// struct Person {
@@ -220,9 +227,9 @@ impl<'a, T: ?Sized> MappedRwLockReadGuard<'a, T> {
     ///
     /// // Try to map to the email if it exists
     /// let person_guard = rwlock.read().await;
-    /// let email_result = MappedRwLockReadGuard::try_map(
+    /// let email_result = MappedRwLockReadGuard::filter_map(
     ///     RwLockReadGuard::map(person_guard, |person| &person.email),
-    ///     |email_opt| email_opt.as_ref()
+    ///     |email_opt| email_opt.as_ref(),
     /// );
     ///
     /// match email_result {
@@ -236,7 +243,7 @@ impl<'a, T: ?Sized> MappedRwLockReadGuard<'a, T> {
     /// }
     /// # }
     /// ```
-    pub fn try_map<U, F>(orig: Self, f: F) -> Result<MappedRwLockReadGuard<'a, U>, Self>
+    pub fn filter_map<U, F>(orig: Self, f: F) -> Result<MappedRwLockReadGuard<'a, U>, Self>
     where
         F: FnOnce(&T) -> Option<&U>,
         U: ?Sized,

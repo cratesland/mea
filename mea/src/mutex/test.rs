@@ -69,13 +69,19 @@ async fn test_mapped_guard_holds_lock() {
     let guard = mutex.lock().await;
     let mapped_guard = MutexGuard::map(guard, |data| &mut data.0);
 
-    assert!(mutex.try_lock().is_none(), "Lock should be held by the mapped guard");
+    assert!(
+        mutex.try_lock().is_none(),
+        "Lock should be held by the mapped guard"
+    );
 
     assert_eq!(*mapped_guard, 10);
 
     drop(mapped_guard);
 
-    assert!(mutex.try_lock().is_some(), "Lock should be released after mapped guard is dropped");
+    assert!(
+        mutex.try_lock().is_some(),
+        "Lock should be released after mapped guard is dropped"
+    );
 }
 
 #[tokio::test]
@@ -86,23 +92,29 @@ async fn test_owned_mapped_guard_holds_lock() {
     let owned_guard = mutex.clone().lock_owned().await;
     let mapped_owned_guard = OwnedMutexGuard::map(owned_guard, |data| &mut data.1);
 
-    assert!(mutex.try_lock().is_none(), "Lock should be held by the mapped owned guard");
+    assert!(
+        mutex.try_lock().is_none(),
+        "Lock should be held by the mapped owned guard"
+    );
 
     assert_eq!(*mapped_owned_guard, 40);
 
     // When mapped owned guard is dropped, lock should be released
     drop(mapped_owned_guard);
 
-    assert!(mutex.try_lock().is_some(), "Lock should be released after mapped owned guard is dropped");
+    assert!(
+        mutex.try_lock().is_some(),
+        "Lock should be released after mapped owned guard is dropped"
+    );
 }
 
 #[tokio::test]
-async fn test_guard_try_map_failure() {
+async fn test_guard_filter_map_failure() {
     let data: Vec<i32> = vec![];
     let mutex = Mutex::new(data);
     let guard = mutex.lock().await;
 
-    let result = MutexGuard::try_map(guard, |vec| vec.get_mut(0));
+    let result = MutexGuard::filter_map(guard, |vec| vec.get_mut(0));
     assert!(result.is_err());
 
     if let Err(mut original_guard) = result {
@@ -114,12 +126,12 @@ async fn test_guard_try_map_failure() {
 }
 
 #[tokio::test]
-async fn test_owned_guard_try_map_failure() {
+async fn test_owned_guard_filter_map_failure() {
     let data: Vec<i32> = vec![];
     let mutex = Arc::new(Mutex::new(data));
     let guard = mutex.clone().lock_owned().await;
 
-    let result = OwnedMutexGuard::try_map(guard, |vec| vec.get_mut(0));
+    let result = OwnedMutexGuard::filter_map(guard, |vec| vec.get_mut(0));
     assert!(result.is_err());
 
     if let Err(mut original_guard) = result {
@@ -165,7 +177,7 @@ async fn test_stress() {
             }
         }));
     }
-    
+
     for handle in handles {
         handle.await.unwrap();
     }
@@ -182,7 +194,10 @@ async fn test_guard_prevents_concurrent_access() {
 
     let guard = mutex.lock().await;
 
-    assert!(mutex.try_lock().is_none(), "Lock should be held by the first guard");
+    assert!(
+        mutex.try_lock().is_none(),
+        "Lock should be held by the first guard"
+    );
 
     let handle = tokio::spawn(async move {
         let _guard2 = mutex_clone.lock().await;
@@ -191,14 +206,20 @@ async fn test_guard_prevents_concurrent_access() {
 
     tokio::task::yield_now().await;
 
-    assert!(mutex.try_lock().is_none(), "Lock should still be held after yielding");
+    assert!(
+        mutex.try_lock().is_none(),
+        "Lock should still be held after yielding"
+    );
 
     drop(guard);
 
     let result = handle.await.unwrap();
     assert_eq!(result, 123);
 
-    assert!(mutex.try_lock().is_some(), "Lock should be available after all guards are dropped");
+    assert!(
+        mutex.try_lock().is_some(),
+        "Lock should be available after all guards are dropped"
+    );
 }
 
 #[test]
@@ -274,7 +295,7 @@ async fn test_mapped_guard_panic_safety() {
 #[tokio::test]
 async fn test_memory_ordering_correctness() {
     // Test that mutex provides proper memory ordering guarantees
-    // When one task modifies data under mutex protection, 
+    // When one task modifies data under mutex protection,
     // another task should see the modification after acquiring the lock
     let mutex = Arc::new(Mutex::new(vec![1, 2, 3]));
     let mutex_clone = mutex.clone();
@@ -303,7 +324,7 @@ async fn test_mutex_zst() {
     let mutex_clone = mutex.clone();
     let handle = tokio::spawn(async move {
         let guard = mutex_clone.lock().await;
-        assert_eq!(*guard, ());
+        *guard;
     });
 
     handle.await.unwrap();
@@ -314,7 +335,7 @@ async fn test_mutex_zst() {
 
     drop(_owned_guard);
     let guard = mutex.try_lock().unwrap();
-    assert_eq!(*guard, ());
+    *guard;
 }
 
 #[tokio::test]
