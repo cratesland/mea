@@ -16,11 +16,17 @@ use std::fmt;
 
 /// An error returned when trying to send on a closed channel.
 ///
-/// Returned from [`UnboundedSender::send`] and [`BoundedSender::send`] if the corresponding
-/// [`UnboundedReceiver`] has already been dropped.
+/// Returned from [`UnboundedSender::send`] or [`BoundedSender::send`] if the
+/// corresponding [`UnboundedReceiver`] or [`BoundedReceiver`] has already been
+/// dropped.
 ///
 /// The message that could not be sent can be retrieved again with
 /// [`SendError::into_inner`].
+///
+/// [`UnboundedSender::send`]: crate::mpsc::UnboundedSender::send
+/// [`BoundedSender::send`]: crate::mpsc::BoundedSender::send
+/// [`UnboundedReceiver`]: crate::mpsc::UnboundedReceiver
+/// [`BoundedReceiver`]: crate::mpsc::BoundedReceiver
 #[derive(Eq, PartialEq)]
 pub struct SendError<T>(T);
 

@@ -13,8 +13,11 @@
 // limitations under the License.
 
 use std::fmt;
+use std::mem::ManuallyDrop;
 use std::ops::Deref;
+use std::ptr::NonNull;
 
+use crate::rwlock::MappedRwLockReadGuard;
 use crate::rwlock::RwLock;
 
 impl<T: ?Sized> RwLock<T> {
@@ -98,6 +101,8 @@ impl<T: ?Sized> RwLock<T> {
 /// RAII structure used to release the shared read access of a lock when dropped.
 ///
 /// This structure is created by the [`RwLock::read`] method.
+///
+/// See the [module level documentation](crate::rwlock) for more.
 #[must_use = "if unused the RwLock will immediately unlock"]
 pub struct RwLockReadGuard<'a, T: ?Sized> {
     lock: &'a RwLock<T>,
@@ -128,5 +133,89 @@ impl<T: ?Sized> Deref for RwLockReadGuard<'_, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         unsafe { &*self.lock.c.get() }
+    }
+}
+
+impl<'a, T: ?Sized> RwLockReadGuard<'a, T> {
+    /// Makes a new [`MappedRwLockReadGuard`] for a component of the locked data.
+    ///
+    /// This operation cannot fail as the `RwLockReadGuard` passed in already locked the rwlock.
+    ///
+    /// This is an associated function that needs to be used as `RwLockReadGuard::map(...)`.
+    ///
+    /// A method would interfere with methods of the same name on the contents of the locked data.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use mea::rwlock::RwLock;
+    /// use mea::rwlock::RwLockReadGuard;
+    ///
+    /// #[derive(Debug, Clone)]
+    /// struct Foo(String);
+    ///
+    /// let rwlock = RwLock::new(Foo("hello".to_owned()));
+    ///
+    /// let guard = rwlock.read().await;
+    /// let mapped_guard = RwLockReadGuard::map(guard, |f| &f.0);
+    ///
+    /// assert_eq!(&*mapped_guard, "hello");
+    /// # }
+    /// ```
+    pub fn map<U, F>(orig: Self, f: F) -> MappedRwLockReadGuard<'a, U>
+    where
+        F: FnOnce(&T) -> &U,
+        U: ?Sized,
+    {
+        let d = NonNull::from(f(&*orig));
+        let orig = ManuallyDrop::new(orig);
+        MappedRwLockReadGuard::new(d, &orig.lock.s)
+    }
+
+    /// Attempts to make a new [`MappedRwLockReadGuard`] for a component of the
+    /// locked data. The original guard is returned if the closure returns `None`.
+    ///
+    /// This operation cannot fail as the `RwLockReadGuard` passed in already locked the rwlock.
+    ///
+    /// This is an associated function that needs to be used as `RwLockReadGuard::filter_map(...)`.
+    ///
+    /// A method would interfere with methods of the same name on the contents of the locked data.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use mea::rwlock::RwLock;
+    /// use mea::rwlock::RwLockReadGuard;
+    ///
+    /// #[derive(Debug, Clone)]
+    /// struct Foo(String);
+    ///
+    /// let rwlock = RwLock::new(Foo("hello".to_owned()));
+    ///
+    /// let guard = rwlock.read().await;
+    /// let mapped_guard =
+    ///     RwLockReadGuard::filter_map(guard, |f| if f.0.len() > 3 { Some(&f.0) } else { None })
+    ///         .expect("should have mapped");
+    ///
+    /// assert_eq!(&*mapped_guard, "hello");
+    /// # }
+    /// ```
+    pub fn filter_map<U, F>(orig: Self, f: F) -> Result<MappedRwLockReadGuard<'a, U>, Self>
+    where
+        F: FnOnce(&T) -> Option<&U>,
+        U: ?Sized,
+    {
+        match f(&*orig) {
+            Some(d) => {
+                let d = NonNull::from(d);
+                let orig = ManuallyDrop::new(orig);
+                Ok(MappedRwLockReadGuard::new(d, &orig.lock.s))
+            }
+            None => Err(orig),
+        }
     }
 }

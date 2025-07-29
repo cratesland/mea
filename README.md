@@ -77,6 +77,4 @@ This crate collects runtime-agnostic synchronization primitives from spare parts
 
 Other parts are written from scratch.
 
-NB. The `Mapped` variant of `Mutex` and `RwLock` is not implemented yet. [The rationale of this variant](https://github.com/rust-lang/libs-team/issues/260) is valid. Just I don't have time to review the implementation.
-
 NB. The optimization considerations are different when implementing a sync primitive for sync code and async code. Generally speaking, once you have an async + runtime-agnostic implementation, you can immediately have a sync implementation by block_on any async runtime ([`pollster`](https://github.com/zesterer/pollster) is the most lightweight runtime that park the current thread). However, a sync-oriented implementation may leverage some platform-specific features to achieve better performance. This library is designed for async code, so it doesn't consider sync-oriented optimization. I often find libraries that try to provide both sync and async implementations end up with a clumsy API design. So I prefer to keep them separate.
