@@ -42,7 +42,6 @@ use crate::rwlock::RwLock;
 /// [`filter_map`]: crate::rwlock::OwnedRwLockWriteGuard::filter_map
 /// [`OwnedRwLockWriteGuard`]: crate::rwlock::OwnedRwLockWriteGuard
 /// [`MappedRwLockWriteGuard`]: crate::rwlock::MappedRwLockWriteGuard
-/// [`RwLock`]: crate::rwlock::RwLock
 ///
 /// See the [module level documentation](crate::rwlock) for more.
 ///
@@ -153,8 +152,9 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockWriteGuard<T, U> {
     /// rwlock.
     ///
     /// This is an associated function that needs to be used as
-    /// `OwnedMappedRwLockWriteGuard::map(...)`. A method would interfere with methods of the
-    /// same name on the contents of the locked data.
+    /// `OwnedMappedRwLockWriteGuard::map(...)`.
+    ///
+    /// A method would interfere with methods of the same name on the contents of the locked data.
     ///
     /// # Examples
     ///
@@ -222,8 +222,9 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockWriteGuard<T, U> {
     /// rwlock.
     ///
     /// This is an associated function that needs to be used as
-    /// `OwnedMappedRwLockWriteGuard::filter_map(...)`. A method would interfere with methods of
-    /// the same name on the contents of the locked data.
+    /// `OwnedMappedRwLockWriteGuard::filter_map(...)`.
+    ///
+    /// A method would interfere with methods of the same name on the contents of the locked data.
     ///
     /// # Examples
     ///

@@ -137,12 +137,13 @@ impl<T: ?Sized> Deref for RwLockReadGuard<'_, T> {
 }
 
 impl<'a, T: ?Sized> RwLockReadGuard<'a, T> {
-    /// Makes a new [`crate::rwlock::MappedRwLockReadGuard`] for a component of the locked data.
+    /// Makes a new [`MappedRwLockReadGuard`] for a component of the locked data.
     ///
     /// This operation cannot fail as the `RwLockReadGuard` passed in already locked the rwlock.
     ///
-    /// This is an associated function that needs to be used as `RwLockReadGuard::map(...)`. A
-    /// method would interfere with methods of the same name on the contents of the locked data.
+    /// This is an associated function that needs to be used as `RwLockReadGuard::map(...)`.
+    ///
+    /// A method would interfere with methods of the same name on the contents of the locked data.
     ///
     /// # Examples
     ///
@@ -173,14 +174,14 @@ impl<'a, T: ?Sized> RwLockReadGuard<'a, T> {
         MappedRwLockReadGuard::new(d, &orig.lock.s)
     }
 
-    /// Attempts to make a new [`crate::rwlock::MappedRwLockReadGuard`] for a component of the
+    /// Attempts to make a new [`MappedRwLockReadGuard`] for a component of the
     /// locked data. The original guard is returned if the closure returns `None`.
     ///
     /// This operation cannot fail as the `RwLockReadGuard` passed in already locked the rwlock.
     ///
     /// This is an associated function that needs to be used as `RwLockReadGuard::filter_map(...)`.
-    /// A method would interfere with methods of the same name on the contents of the locked
-    /// data.
+    ///
+    /// A method would interfere with methods of the same name on the contents of the locked data.
     ///
     /// # Examples
     ///

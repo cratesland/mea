@@ -16,6 +16,7 @@ use std::fmt;
 use std::ops::Deref;
 use std::sync::Arc;
 
+use crate::rwlock::OwnedMappedRwLockReadGuard;
 use crate::rwlock::RwLock;
 
 impl<T: ?Sized> RwLock<T> {
@@ -145,14 +146,15 @@ impl<T: ?Sized> Deref for OwnedRwLockReadGuard<T> {
 }
 
 impl<T: ?Sized> OwnedRwLockReadGuard<T> {
-    /// Makes a new [`crate::rwlock::OwnedMappedRwLockReadGuard`] for a component of the locked
+    /// Makes a new [`OwnedMappedRwLockReadGuard`] for a component of the locked
     /// data.
     ///
     /// This operation cannot fail as the `OwnedRwLockReadGuard` passed in already locked the
     /// rwlock.
     ///
-    /// This is an associated function that needs to be used as `OwnedRwLockReadGuard::map(...)`. A
-    /// method would interfere with methods of the same name on the contents of the locked data.
+    /// This is an associated function that needs to be used as `OwnedRwLockReadGuard::map(...)`.
+    ///
+    /// A method would interfere with methods of the same name on the contents of the locked data.
     ///
     /// # Examples
     ///
@@ -181,7 +183,7 @@ impl<T: ?Sized> OwnedRwLockReadGuard<T> {
     /// assert_eq!(*mapped_guard, 1);
     /// # }
     /// ```
-    pub fn map<U, F>(orig: Self, f: F) -> crate::rwlock::OwnedMappedRwLockReadGuard<T, U>
+    pub fn map<U, F>(orig: Self, f: F) -> OwnedMappedRwLockReadGuard<T, U>
     where
         F: FnOnce(&T) -> &U,
         U: ?Sized,
@@ -195,18 +197,19 @@ impl<T: ?Sized> OwnedRwLockReadGuard<T> {
         // Safely extract the Arc from the guard
         let lock = unsafe { std::ptr::read(&orig.lock) };
 
-        crate::rwlock::OwnedMappedRwLockReadGuard::new(d, lock)
+        OwnedMappedRwLockReadGuard::new(d, lock)
     }
 
-    /// Attempts to make a new [`crate::rwlock::OwnedMappedRwLockReadGuard`] for a component of the
-    /// locked data. The original guard is returned if the closure returns `None`.
+    /// Attempts to make a new [`OwnedMappedRwLockReadGuard`] for a component of the locked data.
+    /// The original guard is returned if the closure returns `None`.
     ///
     /// This operation cannot fail as the `OwnedRwLockReadGuard` passed in already locked the
     /// rwlock.
     ///
     /// This is an associated function that needs to be used as
-    /// `OwnedRwLockReadGuard::filter_map(...)`. A method would interfere with methods of the same
-    /// name on the contents of the locked data.
+    /// `OwnedRwLockReadGuard::filter_map(...)`.
+    ///
+    /// A method would interfere with methods of the same name on the contents of the locked data.
     ///
     /// # Examples
     ///
@@ -237,10 +240,7 @@ impl<T: ?Sized> OwnedRwLockReadGuard<T> {
     /// assert_eq!(&*mapped_guard, "hello");
     /// # }
     /// ```
-    pub fn filter_map<U, F>(
-        orig: Self,
-        f: F,
-    ) -> Result<crate::rwlock::OwnedMappedRwLockReadGuard<T, U>, Self>
+    pub fn filter_map<U, F>(orig: Self, f: F) -> Result<OwnedMappedRwLockReadGuard<T, U>, Self>
     where
         F: FnOnce(&T) -> Option<&U>,
         U: ?Sized,
@@ -256,7 +256,7 @@ impl<T: ?Sized> OwnedRwLockReadGuard<T> {
                 // Safely extract the Arc from the guard
                 let lock = unsafe { std::ptr::read(&orig.lock) };
 
-                Ok(crate::rwlock::OwnedMappedRwLockReadGuard::new(d, lock))
+                Ok(OwnedMappedRwLockReadGuard::new(d, lock))
             }
             None => Err(orig),
         }

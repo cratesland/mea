@@ -136,8 +136,9 @@ impl<'a, T: ?Sized> MappedRwLockReadGuard<'a, T> {
     /// This operation cannot fail as the `MappedRwLockReadGuard` passed in already locked the
     /// rwlock.
     ///
-    /// This is an associated function that needs to be used as `MappedRwLockReadGuard::map(...)`. A
-    /// method would interfere with methods of the same name on the contents of the locked data.
+    /// This is an associated function that needs to be used as `MappedRwLockReadGuard::map(...)`.
+    ///
+    /// A method would interfere with methods of the same name on the contents of the locked data.
     ///
     /// # Examples
     ///
@@ -198,8 +199,9 @@ impl<'a, T: ?Sized> MappedRwLockReadGuard<'a, T> {
     /// rwlock.
     ///
     /// This is an associated function that needs to be used as
-    /// `MappedRwLockReadGuard::filter_map(...)`. A method would interfere with methods of the same
-    /// name on the contents of the locked data.
+    /// `MappedRwLockReadGuard::filter_map(...)`.
+    ///
+    /// A method would interfere with methods of the same name on the contents of the locked data.
     ///
     /// # Examples
     ///

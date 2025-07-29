@@ -86,7 +86,6 @@ pub struct MappedRwLockWriteGuard<'a, T: ?Sized> {
     variance: PhantomData<&'a mut T>,
 }
 
-// The guard also Derefs to the inner data.
 // SAFETY: A `&MappedRwLockWriteGuard` can be safely shared between threads because it provides
 // exclusive access to the data, and the `T: Send + Sync` bound prevents data races.
 unsafe impl<T: ?Sized + Send + Sync> Sync for MappedRwLockWriteGuard<'_, T> {}
@@ -147,6 +146,7 @@ impl<'a, T: ?Sized> MappedRwLockWriteGuard<'a, T> {
     /// rwlock.
     ///
     /// This is an associated function that needs to be used as `MappedRwLockWriteGuard::map(...)`.
+    ///
     /// A method would interfere with methods of the same name on the contents of the locked
     /// data.
     ///
@@ -211,8 +211,9 @@ impl<'a, T: ?Sized> MappedRwLockWriteGuard<'a, T> {
     /// rwlock.
     ///
     /// This is an associated function that needs to be used as
-    /// `MappedRwLockWriteGuard::filter_map(...)`. A method would interfere with methods of the
-    /// same name on the contents of the locked data.
+    /// `MappedRwLockWriteGuard::filter_map(...)`.
+    ///
+    /// A method would interfere with methods of the same name on the contents of the locked data.
     ///
     /// # Examples
     ///

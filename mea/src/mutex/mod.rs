@@ -387,8 +387,9 @@ impl<'a, T: ?Sized> MutexGuard<'a, T> {
     ///
     /// This operation cannot fail as the `MutexGuard` passed in already locked the mutex.
     ///
-    /// This is an associated function that needs to be used as `MutexGuard::filter_map(...)`. A
-    /// method would interfere with methods of the same name on the contents of the locked data.
+    /// This is an associated function that needs to be used as `MutexGuard::filter_map(...)`.
+    ///
+    /// A method would interfere with methods of the same name on the contents of the locked data.
     ///
     /// # Examples
     ///
@@ -562,8 +563,8 @@ impl<T: ?Sized> OwnedMutexGuard<T> {
     /// This operation cannot fail as the `OwnedMutexGuard` passed in already locked the mutex.
     ///
     /// This is an associated function that needs to be used as `OwnedMutexGuard::filter_map(...)`.
-    /// A method would interfere with methods of the same name on the contents of the locked
-    /// data.
+    ///
+    /// A method would interfere with methods of the same name on the contents of the locked data.
     ///
     /// # Examples
     ///

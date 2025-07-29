@@ -146,14 +146,15 @@ impl<T: ?Sized> DerefMut for OwnedRwLockWriteGuard<T> {
 }
 
 impl<T: ?Sized> OwnedRwLockWriteGuard<T> {
-    /// Makes a new [`crate::rwlock::OwnedMappedRwLockWriteGuard`] for a component of the locked
+    /// Makes a new [`OwnedMappedRwLockWriteGuard`] for a component of the locked
     /// data.
     ///
     /// This operation cannot fail as the `OwnedRwLockWriteGuard` passed in already locked the
     /// rwlock.
     ///
-    /// This is an associated function that needs to be used as `OwnedRwLockWriteGuard::map(...)`. A
-    /// method would interfere with methods of the same name on the contents of the locked data.
+    /// This is an associated function that needs to be used as `OwnedRwLockWriteGuard::map(...)`.
+    ///
+    /// A method would interfere with methods of the same name on the contents of the locked data.
     ///
     /// # Examples
     ///
@@ -200,15 +201,16 @@ impl<T: ?Sized> OwnedRwLockWriteGuard<T> {
         OwnedMappedRwLockWriteGuard::new(d, lock, permits_acquired)
     }
 
-    /// Attempts to make a new [`crate::rwlock::OwnedMappedRwLockWriteGuard`] for a component of the
+    /// Attempts to make a new [`OwnedMappedRwLockWriteGuard`] for a component of the
     /// locked data. The original guard is returned if the closure returns `None`.
     ///
     /// This operation cannot fail as the `OwnedRwLockWriteGuard` passed in already locked the
     /// rwlock.
     ///
     /// This is an associated function that needs to be used as
-    /// `OwnedRwLockWriteGuard::filter_map(...)`. A method would interfere with methods of the same
-    /// name on the contents of the locked data.
+    /// `OwnedRwLockWriteGuard::filter_map(...)`.
+    ///
+    /// A method would interfere with methods of the same name on the contents of the locked data.
     ///
     /// # Examples
     ///

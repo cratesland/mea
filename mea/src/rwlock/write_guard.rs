@@ -134,12 +134,13 @@ impl<T: ?Sized> DerefMut for RwLockWriteGuard<'_, T> {
 }
 
 impl<'a, T: ?Sized> RwLockWriteGuard<'a, T> {
-    /// Makes a new [`crate::rwlock::MappedRwLockWriteGuard`] for a component of the locked data.
+    /// Makes a new [`MappedRwLockWriteGuard`] for a component of the locked data.
     ///
     /// This operation cannot fail as the `RwLockWriteGuard` passed in already locked the rwlock.
     ///
-    /// This is an associated function that needs to be used as `RwLockWriteGuard::map(...)`. A
-    /// method would interfere with methods of the same name on the contents of the locked data.
+    /// This is an associated function that needs to be used as `RwLockWriteGuard::map(...)`.
+    ///
+    /// A method would interfere with methods of the same name on the contents of the locked data.
     ///
     /// # Examples
     ///
@@ -178,14 +179,14 @@ impl<'a, T: ?Sized> RwLockWriteGuard<'a, T> {
         MappedRwLockWriteGuard::new(d, &orig.lock.s, permits_acquired)
     }
 
-    /// Attempts to make a new [`crate::rwlock::MappedRwLockWriteGuard`] for a component of the
+    /// Attempts to make a new [`MappedRwLockWriteGuard`] for a component of the
     /// locked data. The original guard is returned if the closure returns `None`.
     ///
     /// This operation cannot fail as the `RwLockWriteGuard` passed in already locked the rwlock.
     ///
     /// This is an associated function that needs to be used as `RwLockWriteGuard::filter_map(...)`.
-    /// A method would interfere with methods of the same name on the contents of the locked
-    /// data.
+    ///
+    /// A method would interfere with methods of the same name on the contents of the locked data.
     ///
     /// # Examples
     ///
