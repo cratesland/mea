@@ -13,8 +13,13 @@
 // limitations under the License.
 
 use std::sync::Arc;
+use std::sync::Weak;
 
 use super::*;
+use crate::rwlock::OwnedMappedRwLockReadGuard;
+use crate::rwlock::OwnedMappedRwLockWriteGuard;
+use crate::rwlock::OwnedRwLockReadGuard;
+use crate::rwlock::OwnedRwLockWriteGuard;
 
 #[test]
 fn test_try_read_write_never_blocks() {
@@ -417,4 +422,279 @@ async fn test_rwlock_zst() {
 
     let guard = rwlock.try_read().unwrap();
     *guard;
+}
+
+#[tokio::test]
+async fn test_owned_write_guard_map_memory_leak() {
+    // Test OwnedRwLockWriteGuard::map memory management
+    let rwlock = Arc::new(RwLock::new(29u32));
+    let weak_ref: Weak<RwLock<u32>> = Arc::downgrade(&rwlock);
+
+    {
+        let write_guard = rwlock.clone().write_owned().await;
+        let mut mapped_guard = OwnedRwLockWriteGuard::map(write_guard, |data| data);
+        *mapped_guard = 100;
+        assert_eq!(*mapped_guard, 100);
+    }
+
+    drop(rwlock);
+    assert!(
+        weak_ref.upgrade().is_none(),
+        "expected Arc to be dropped (no strong refs)"
+    );
+}
+
+#[tokio::test]
+async fn test_owned_write_guard_filter_map_memory_leak() {
+    // Test OwnedRwLockWriteGuard::filter_map memory management
+
+    // Test success case
+    {
+        let rwlock = Arc::new(RwLock::new(Some(29u32)));
+        let weak_ref: Weak<RwLock<Option<u32>>> = Arc::downgrade(&rwlock);
+
+        {
+            let write_guard = rwlock.clone().write_owned().await;
+            let mut mapped_guard =
+                OwnedRwLockWriteGuard::filter_map(write_guard, |data| data.as_mut())
+                    .expect("Should succeed");
+            *mapped_guard = 100;
+            assert_eq!(*mapped_guard, 100);
+        }
+
+        drop(rwlock);
+        assert!(
+            weak_ref.upgrade().is_none(),
+            "expected Arc to be dropped after filter_map success"
+        );
+    }
+
+    // Test failure case
+    {
+        let rwlock = Arc::new(RwLock::new(None::<u32>));
+        let weak_ref: Weak<RwLock<Option<u32>>> = Arc::downgrade(&rwlock);
+
+        {
+            let write_guard = rwlock.clone().write_owned().await;
+            let result = OwnedRwLockWriteGuard::filter_map(write_guard, |data| data.as_mut());
+            assert!(result.is_err(), "filter_map should have failed for None");
+        }
+
+        drop(rwlock);
+        assert!(
+            weak_ref.upgrade().is_none(),
+            "expected Arc to be dropped after filter_map failure"
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_owned_mapped_write_guard_map_memory_leak() {
+    // Test OwnedMappedRwLockWriteGuard::map memory management
+    let rwlock = Arc::new(RwLock::new("test".to_string()));
+    let weak_ref: Weak<RwLock<String>> = Arc::downgrade(&rwlock);
+
+    {
+        let write_guard = rwlock.clone().write_owned().await;
+        let mapped_guard1 = OwnedRwLockWriteGuard::map(write_guard, |s| s);
+        let mut mapped_guard2 = OwnedMappedRwLockWriteGuard::map(mapped_guard1, |s| s.as_mut_str());
+        mapped_guard2.make_ascii_uppercase();
+        assert_eq!(&*mapped_guard2, "TEST");
+    }
+
+    drop(rwlock);
+    assert!(
+        weak_ref.upgrade().is_none(),
+        "expected Arc to be dropped (no strong refs)"
+    );
+}
+
+#[tokio::test]
+async fn test_owned_mapped_write_guard_filter_map_memory_leak() {
+    // Test OwnedMappedRwLockWriteGuard::filter_map memory management
+
+    // Test success case
+    {
+        let rwlock = Arc::new(RwLock::new(vec![1, 2, 3]));
+        let weak_ref: Weak<RwLock<Vec<i32>>> = Arc::downgrade(&rwlock);
+
+        {
+            let write_guard = rwlock.clone().write_owned().await;
+            let mapped_guard1 = OwnedRwLockWriteGuard::map(write_guard, |v| v);
+            let mut mapped_guard2 = OwnedMappedRwLockWriteGuard::filter_map(mapped_guard1, |v| {
+                if !v.is_empty() {
+                    Some(&mut v[0])
+                } else {
+                    None
+                }
+            })
+            .expect("Should succeed");
+            *mapped_guard2 = 100;
+            assert_eq!(*mapped_guard2, 100);
+        }
+
+        drop(rwlock);
+        assert!(
+            weak_ref.upgrade().is_none(),
+            "Memory leak detected on filter_map success"
+        );
+    }
+
+    // Test failure case
+    {
+        let rwlock = Arc::new(RwLock::new(Vec::<i32>::new()));
+        let weak_ref: Weak<RwLock<Vec<i32>>> = Arc::downgrade(&rwlock);
+
+        {
+            let write_guard = rwlock.clone().write_owned().await;
+            let mapped_guard1 = OwnedRwLockWriteGuard::map(write_guard, |v| v);
+            let result = OwnedMappedRwLockWriteGuard::filter_map(mapped_guard1, |v| {
+                if !v.is_empty() {
+                    Some(&mut v[0])
+                } else {
+                    None
+                }
+            });
+
+            assert!(
+                result.is_err(),
+                "filter_map should have failed for empty vector"
+            );
+            if let Err(original_guard) = result {
+                assert!(original_guard.is_empty());
+            }
+        }
+
+        drop(rwlock);
+        assert!(
+            weak_ref.upgrade().is_none(),
+            "Memory leak detected on filter_map failure"
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_owned_read_guard_map_memory_leak() {
+    // Test OwnedRwLockReadGuard::map memory management
+    let rwlock = Arc::new(RwLock::new(29u32));
+    let weak_ref: Weak<RwLock<u32>> = Arc::downgrade(&rwlock);
+
+    {
+        let read_guard = rwlock.clone().read_owned().await;
+        let mapped_guard = OwnedRwLockReadGuard::map(read_guard, |data| data);
+        assert_eq!(*mapped_guard, 29);
+    }
+
+    drop(rwlock);
+    assert!(
+        weak_ref.upgrade().is_none(),
+        "expected Arc to be dropped (no strong ref; potential memory leaks)"
+    );
+}
+
+#[tokio::test]
+async fn test_owned_read_guard_filter_map_memory_leak() {
+    // Test OwnedRwLockReadGuard::filter_map memory management
+
+    // Test success case
+    {
+        let rwlock = Arc::new(RwLock::new(Some(29u32)));
+        let weak_ref: Weak<RwLock<Option<u32>>> = Arc::downgrade(&rwlock);
+
+        {
+            let read_guard = rwlock.clone().read_owned().await;
+            let mapped_guard = OwnedRwLockReadGuard::filter_map(read_guard, |data| data.as_ref())
+                .expect("filter_map should succeed for Some(_) value");
+            assert_eq!(*mapped_guard, 29);
+        }
+
+        drop(rwlock);
+        assert!(
+            weak_ref.upgrade().is_none(),
+            "expected Arc to be dropped after filter_map success"
+        );
+    }
+
+    // Test failure case
+    {
+        let rwlock = Arc::new(RwLock::new(None::<u32>));
+        let weak_ref: Weak<RwLock<Option<u32>>> = Arc::downgrade(&rwlock);
+
+        {
+            let read_guard = rwlock.clone().read_owned().await;
+            let result = OwnedRwLockReadGuard::filter_map(read_guard, |data| data.as_ref());
+            assert!(result.is_err(), "filter_map should have failed for None");
+        }
+
+        drop(rwlock);
+        assert!(
+            weak_ref.upgrade().is_none(),
+            "expected Arc to be dropped after filter_map failure"
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_owned_mapped_read_guard_map_memory_leak() {
+    // Test OwnedMappedRwLockReadGuard::map memory management
+    let rwlock = Arc::new(RwLock::new("test".to_string()));
+    let weak_ref: Weak<RwLock<String>> = Arc::downgrade(&rwlock);
+
+    {
+        let read_guard = rwlock.clone().read_owned().await;
+        let mapped_guard1 = OwnedRwLockReadGuard::map(read_guard, |s| s);
+        let mapped_guard2 = OwnedMappedRwLockReadGuard::map(mapped_guard1, |s| s.as_str());
+        assert_eq!(&*mapped_guard2, "test");
+    }
+
+    drop(rwlock);
+    assert!(
+        weak_ref.upgrade().is_none(),
+        "Memory leak detected: Arc was not deallocated"
+    );
+}
+
+#[tokio::test]
+async fn test_owned_mapped_read_guard_filter_map_memory_leak() {
+    // Test OwnedMappedRwLockReadGuard::filter_map memory management
+
+    // Test success case
+    {
+        let rwlock = Arc::new(RwLock::new(Some(29u32)));
+        let weak_ref: Weak<RwLock<Option<u32>>> = Arc::downgrade(&rwlock);
+
+        {
+            let read_guard = rwlock.clone().read_owned().await;
+            let mapped_guard1 = OwnedRwLockReadGuard::map(read_guard, |data| data);
+            let mapped_guard2 =
+                OwnedMappedRwLockReadGuard::filter_map(mapped_guard1, |opt| opt.as_ref())
+                    .expect("filter_map should succeed for Some(_) value");
+            assert_eq!(*mapped_guard2, 29);
+        }
+
+        drop(rwlock);
+        assert!(
+            weak_ref.upgrade().is_none(),
+            "expected Arc to be dropped after filter_map success"
+        );
+    }
+
+    // Test failure case
+    {
+        let rwlock = Arc::new(RwLock::new(None::<u32>));
+        let weak_ref: Weak<RwLock<Option<u32>>> = Arc::downgrade(&rwlock);
+
+        {
+            let read_guard = rwlock.clone().read_owned().await;
+            let mapped_guard1 = OwnedRwLockReadGuard::map(read_guard, |data| data);
+            let result = OwnedMappedRwLockReadGuard::filter_map(mapped_guard1, |opt| opt.as_ref());
+            assert!(result.is_err(), "filter_map should have failed for None");
+        }
+
+        drop(rwlock);
+        assert!(
+            weak_ref.upgrade().is_none(),
+            "Memory leak detected on filter_map failure"
+        );
+    }
 }
