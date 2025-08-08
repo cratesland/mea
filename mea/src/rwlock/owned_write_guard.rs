@@ -192,11 +192,13 @@ impl<T: ?Sized> OwnedRwLockWriteGuard<T> {
         // SAFETY: We have exclusive write access to the data through the rwlock.
         // The data pointer is valid for the lifetime of the guard.
         let d = NonNull::from(f(unsafe { &mut *orig.lock.c.get() }));
-        let permits_acquired = orig.permits_acquired;
-        let lock = orig.lock.clone();
+        let orig = std::mem::ManuallyDrop::new(orig);
 
-        // Prevent the original guard from running its Drop implementation
-        std::mem::forget(orig);
+        let permits_acquired = orig.permits_acquired;
+        // SAFETY: The original guard is wrapped in `ManuallyDrop` and will not be dropped.
+        // This allows us to safely move the `Arc` out of it and transfer ownership to the new
+        // guard.
+        let lock = unsafe { std::ptr::read(&orig.lock) };
 
         OwnedMappedRwLockWriteGuard::new(d, lock, permits_acquired)
     }
@@ -259,11 +261,13 @@ impl<T: ?Sized> OwnedRwLockWriteGuard<T> {
             None => return Err(orig),
         };
 
-        let permits_acquired = orig.permits_acquired;
-        let lock = orig.lock.clone();
+        let orig = std::mem::ManuallyDrop::new(orig);
 
-        // Prevent the original guard from running its Drop implementation
-        std::mem::forget(orig);
+        let permits_acquired = orig.permits_acquired;
+        // SAFETY: The original guard is wrapped in `ManuallyDrop` and will not be dropped.
+        // This allows us to safely move the `Arc` out of it and transfer ownership to the new
+        // guard.
+        let lock = unsafe { std::ptr::read(&orig.lock) };
 
         Ok(OwnedMappedRwLockWriteGuard::new(d, lock, permits_acquired))
     }

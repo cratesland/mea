@@ -208,9 +208,13 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockWriteGuard<T, U> {
         // when the original OwnedMappedRwLockWriteGuard was constructed. The guard guarantees
         // exclusive access to the data through the rwlock, so dereferencing is safe.
         let d = NonNull::from(f(unsafe { orig.d.as_mut() }));
-        let permits_acquired = orig.permits_acquired;
         let orig = ManuallyDrop::new(orig);
-        let lock = orig.lock.clone();
+
+        let permits_acquired = orig.permits_acquired;
+        // SAFETY: The original guard is wrapped in `ManuallyDrop` and will not be dropped.
+        // This allows us to safely move the `Arc` out of it and transfer ownership to the new
+        // guard.
+        let lock = unsafe { std::ptr::read(&orig.lock) };
 
         OwnedMappedRwLockWriteGuard::new(d, lock, permits_acquired)
     }
@@ -296,9 +300,13 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockWriteGuard<T, U> {
         match f(unsafe { orig.d.as_mut() }) {
             Some(d) => {
                 let d = NonNull::from(d);
-                let permits_acquired = orig.permits_acquired;
                 let orig = ManuallyDrop::new(orig);
-                let lock = orig.lock.clone();
+
+                let permits_acquired = orig.permits_acquired;
+                // SAFETY: The original guard is wrapped in `ManuallyDrop` and will not be dropped.
+                // This allows us to safely move the `Arc` out of it and transfer ownership to the
+                // new guard.
+                let lock = unsafe { std::ptr::read(&orig.lock) };
 
                 Ok(OwnedMappedRwLockWriteGuard::new(d, lock, permits_acquired))
             }
