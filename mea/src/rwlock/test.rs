@@ -698,3 +698,374 @@ async fn test_owned_mapped_read_guard_filter_map_memory_leak() {
         );
     }
 }
+
+#[tokio::test]
+async fn test_downgrade_atomicity() {
+    // Test atomic downgrade behavior for all guard types
+    let rwlock = Arc::new(RwLock::new((42, "test".to_string())));
+
+    // Test basic write guard downgrade
+    {
+        let mut write_guard = rwlock.write().await;
+        write_guard.0 = 100;
+
+        let read_guard = write_guard.downgrade();
+        assert_eq!(read_guard.0, 100);
+
+        // Writers blocked, readers allowed
+        assert!(rwlock.try_write().is_none());
+        let concurrent_read = rwlock.try_read().unwrap();
+        assert_eq!(concurrent_read.0, 100);
+        drop(concurrent_read);
+        drop(read_guard);
+    }
+
+    // Test owned write guard downgrade
+    {
+        let mut owned_write = rwlock.clone().write_owned().await;
+        owned_write.1 = "updated".to_string();
+
+        let owned_read = owned_write.downgrade();
+        assert_eq!(owned_read.1, "updated");
+
+        assert!(rwlock.try_write().is_none());
+        drop(owned_read);
+    }
+
+    // Test mapped write guard downgrade
+    {
+        let write_guard = rwlock.write().await;
+        let mut mapped_write = RwLockWriteGuard::map(write_guard, |data| &mut data.0);
+        *mapped_write = 200;
+
+        let mapped_read = mapped_write.downgrade();
+        assert_eq!(*mapped_read, 200);
+
+        assert!(rwlock.try_write().is_none());
+        drop(mapped_read);
+    }
+
+    // Test owned mapped write guard downgrade
+    {
+        let owned_write = rwlock.clone().write_owned().await;
+        let mut owned_mapped = OwnedRwLockWriteGuard::map(owned_write, |data| &mut data.1);
+        *owned_mapped = "final".to_string();
+
+        let owned_mapped_read = owned_mapped.downgrade();
+        assert_eq!(*owned_mapped_read, "final");
+
+        let moved_task = tokio::spawn(async move {
+            assert_eq!(*owned_mapped_read, "final");
+        });
+        moved_task.await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn test_downgrade_allows_concurrent_readers() {
+    // Test that downgrading a write lock allows other readers to acquire the lock.
+    let rwlock = Arc::new(RwLock::new(0i32));
+    let writer_started = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let downgrade_completed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    let writer_rwlock = rwlock.clone();
+    let writer_started_clone = writer_started.clone();
+    let downgrade_completed_clone = downgrade_completed.clone();
+
+    let writer_handle = tokio::spawn(async move {
+        let mut write_guard = writer_rwlock.write().await;
+        *write_guard = 42;
+        writer_started_clone.store(true, std::sync::atomic::Ordering::SeqCst);
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        let read_guard = write_guard.downgrade();
+        downgrade_completed_clone.store(true, std::sync::atomic::Ordering::SeqCst);
+
+        assert_eq!(*read_guard, 42);
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+        *read_guard
+    });
+
+    while !writer_started.load(std::sync::atomic::Ordering::SeqCst) {
+        tokio::task::yield_now().await;
+    }
+
+    let mut reader_handles = vec![];
+    for i in 0..5 {
+        let reader_rwlock = rwlock.clone();
+        let downgrade_completed_clone = downgrade_completed.clone();
+
+        let handle = tokio::spawn(async move {
+            while !downgrade_completed_clone.load(std::sync::atomic::Ordering::SeqCst) {
+                tokio::task::yield_now().await;
+            }
+
+            let read_guard = reader_rwlock.read().await;
+            assert_eq!(*read_guard, 42);
+            (i, *read_guard)
+        });
+        reader_handles.push(handle);
+    }
+
+    // All tasks should complete successfully
+    let writer_result = writer_handle.await.unwrap();
+    assert_eq!(writer_result, 42);
+
+    for handle in reader_handles {
+        let (reader_id, value) = handle.await.unwrap();
+        assert_eq!(
+            value, 42,
+            "Reader {} should see the written value",
+            reader_id
+        );
+    }
+}
+#[tokio::test]
+async fn test_downgrade_with_max_readers() {
+    let rwlock = Arc::new(RwLock::with_max_readers(0, 3));
+
+    let mut write_guard = rwlock.write().await;
+    *write_guard = 100;
+
+    let read_guard = write_guard.downgrade();
+    assert_eq!(*read_guard, 100);
+
+    let read2 = rwlock.try_read().unwrap();
+    let read3 = rwlock.try_read().unwrap();
+    assert_eq!(*read2, 100);
+    assert_eq!(*read3, 100);
+
+    assert!(rwlock.try_read().is_none());
+
+    assert!(rwlock.try_write().is_none());
+
+    drop(read2);
+    let read4 = rwlock.try_read().unwrap();
+    assert_eq!(*read4, 100);
+
+    drop(read_guard);
+    drop(read3);
+    drop(read4);
+
+    let write_guard2 = rwlock.try_write().unwrap();
+    assert_eq!(*write_guard2, 100);
+}
+
+#[tokio::test]
+async fn test_downgrade_panic_safety() {
+    let rwlock = Arc::new(RwLock::new((0, "test".to_string())));
+
+    {
+        let rwlock_clone = rwlock.clone();
+        let handle = tokio::spawn(async move {
+            let mut write_guard = rwlock_clone.write().await;
+            write_guard.0 = 42;
+            let read_guard = write_guard.downgrade();
+            assert_eq!(read_guard.0, 42);
+            panic!("test panic after downgrade");
+        });
+
+        assert!(handle.await.is_err());
+
+        let guard = rwlock.try_read().unwrap();
+        assert_eq!(guard.0, 42);
+        drop(guard);
+    }
+
+    {
+        let rwlock_clone = rwlock.clone();
+        let handle = tokio::spawn(async move {
+            let owned_write = rwlock_clone.write_owned().await;
+            let mut mapped_write = OwnedRwLockWriteGuard::map(owned_write, |data| &mut data.1);
+            *mapped_write = "panic_test".to_string();
+            let _mapped_read = mapped_write.downgrade();
+            panic!("test panic with owned mapped downgrade");
+        });
+
+        assert!(handle.await.is_err());
+
+        let guard = rwlock.try_read().unwrap();
+        assert_eq!(guard.1, "panic_test");
+    }
+}
+
+#[tokio::test]
+async fn test_downgrade_prevents_deadlock() {
+    // Test the classic deadlock prevention scenario
+    // Demonstrates how downgrade enables safe lock ordering patterns
+
+    let rwlock = Arc::new(RwLock::new(vec![1, 2, 3]));
+
+    let rwlock1 = rwlock.clone();
+    let task1 = tokio::spawn(async move {
+        let mut write_guard = rwlock1.write().await;
+        write_guard.push(4);
+        let len_after_write = write_guard.len();
+
+        let read_guard = write_guard.downgrade();
+
+        assert_eq!(read_guard.len(), len_after_write);
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        let final_len = read_guard.len();
+        drop(read_guard);
+        final_len
+    });
+
+    let rwlock2 = rwlock.clone();
+    let task2 = tokio::spawn(async move {
+        tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
+
+        let mut write_guard = rwlock2.write().await;
+        write_guard.push(5);
+
+        let read_guard = write_guard.downgrade();
+        let final_len = read_guard.len();
+
+        drop(read_guard);
+        final_len
+    });
+
+    let rwlock3 = rwlock.clone();
+    let task3 = tokio::spawn(async move {
+        tokio::time::sleep(tokio::time::Duration::from_millis(15)).await;
+
+        let read_guard = rwlock3.read().await;
+        read_guard.len()
+    });
+
+    let result1 = task1.await.unwrap();
+    let result2 = task2.await.unwrap();
+    let result3 = task3.await.unwrap();
+
+    assert_eq!(result1, 4); // After first push
+    assert_eq!(result2, 5); // After second push
+    assert_eq!(result3, 5); // Final state
+
+    let final_read = rwlock.read().await;
+    assert_eq!(final_read.len(), 5);
+    assert_eq!(*final_read, vec![1, 2, 3, 4, 5]);
+}
+
+#[tokio::test]
+async fn test_downgrade_with_waiting_writers() {
+    let rwlock = Arc::new(RwLock::new(0i32));
+    let writer_queued = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let downgrade_done = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    let rwlock1 = rwlock.clone();
+    let downgrade_done_clone = downgrade_done.clone();
+    let downgrade_task = tokio::spawn(async move {
+        let mut write_guard = rwlock1.write().await;
+        *write_guard = 42;
+
+        let read_guard = write_guard.downgrade();
+        downgrade_done_clone.store(true, std::sync::atomic::Ordering::SeqCst);
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        assert_eq!(*read_guard, 42);
+
+        drop(read_guard);
+        42
+    });
+
+    while !downgrade_done.load(std::sync::atomic::Ordering::SeqCst) {
+        tokio::task::yield_now().await;
+    }
+
+    let rwlock2 = rwlock.clone();
+    let writer_queued_clone = writer_queued.clone();
+    let writer_task = tokio::spawn(async move {
+        writer_queued_clone.store(true, std::sync::atomic::Ordering::SeqCst);
+
+        let mut write_guard = rwlock2.write().await;
+
+        assert_eq!(*write_guard, 42);
+        *write_guard = 100;
+
+        drop(write_guard);
+        100
+    });
+
+    while !writer_queued.load(std::sync::atomic::Ordering::SeqCst) {
+        tokio::task::yield_now().await;
+    }
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+    let mut reader_tasks = vec![];
+    for i in 0..3 {
+        let rwlock_clone = rwlock.clone();
+
+        let reader_task = tokio::spawn(async move {
+            let read_guard = rwlock_clone.read().await;
+            let value = *read_guard;
+            drop(read_guard);
+            (i, value)
+        });
+        reader_tasks.push(reader_task);
+    }
+
+    let downgrade_result = downgrade_task.await.unwrap();
+    assert_eq!(downgrade_result, 42);
+
+    let writer_result = writer_task.await.unwrap();
+    assert_eq!(writer_result, 100);
+
+    for reader_task in reader_tasks {
+        let (reader_id, value) = reader_task.await.unwrap();
+        // The readers might see either value depending on exact timing,
+        // so let's not make strict assertions here
+        println!("Reader {} saw value: {}", reader_id, value);
+    }
+
+    let final_read = rwlock.read().await;
+    assert_eq!(*final_read, 100);
+}
+
+#[tokio::test]
+async fn test_owned_write_guard_downgrade_no_memory_leak() {
+    let rwlock = Arc::new(RwLock::new(42i32));
+    let weak_ref = Arc::downgrade(&rwlock);
+
+    {
+        let write_guard = rwlock.clone().write_owned().await;
+        let _read_guard = write_guard.downgrade();
+    }
+
+    drop(rwlock);
+
+    assert_eq!(
+        weak_ref.strong_count(),
+        0,
+        "Memory leak detected in OwnedRwLockWriteGuard downgrade!"
+    );
+}
+
+#[tokio::test]
+async fn test_owned_mapped_write_guard_downgrade_no_memory_leak() {
+    #[derive(Debug)]
+    struct Data {
+        value: i32,
+    }
+
+    let rwlock = Arc::new(RwLock::new(Data { value: 42 }));
+    let weak_ref = Arc::downgrade(&rwlock);
+
+    {
+        let write_guard = rwlock.clone().write_owned().await;
+        let mapped_write_guard = OwnedRwLockWriteGuard::map(write_guard, |data| &mut data.value);
+        let _mapped_read_guard = mapped_write_guard.downgrade();
+    }
+
+    drop(rwlock);
+
+    assert_eq!(
+        weak_ref.strong_count(),
+        0,
+        "Memory leak detected in OwnedMappedRwLockWriteGuard downgrade!"
+    );
+}
