@@ -255,7 +255,7 @@ dependencies = [
 
 [[package]]
 name = "mea"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "pollster",
  "slab",
