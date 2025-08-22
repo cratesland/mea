@@ -19,6 +19,7 @@ use std::ops::DerefMut;
 use std::ptr::NonNull;
 
 use crate::internal;
+use crate::rwlock::MappedRwLockReadGuard;
 
 /// RAII structure used to release the exclusive write access of a lock when dropped, for a mapped
 /// component of the locked data.
@@ -285,5 +286,57 @@ impl<'a, T: ?Sized> MappedRwLockWriteGuard<'a, T> {
             }
             None => Err(orig),
         }
+    }
+
+    /// Atomically downgrades the write lock to a read lock while preserving the mapping.
+    ///
+    /// This method changes the lock from exclusive mode to shared mode atomically,
+    /// preventing other writers from acquiring the lock in between.
+    ///
+    /// The returned `MappedRwLockReadGuard` preserves the original mapping to the specific
+    /// component of the data.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use std::sync::Arc;
+    ///
+    /// use mea::rwlock::RwLock;
+    /// use mea::rwlock::RwLockWriteGuard;
+    ///
+    /// #[derive(Debug)]
+    /// struct Counter {
+    ///     value: i32,
+    ///     name: String,
+    /// }
+    ///
+    /// let lock = Arc::new(RwLock::new(Counter {
+    ///     value: 0,
+    ///     name: "counter".to_owned(),
+    /// }));
+    ///
+    /// let write_guard = lock.write().await;
+    /// let mut value_write_guard = RwLockWriteGuard::map(write_guard, |counter| &mut counter.value);
+    /// *value_write_guard = 42;
+    ///
+    /// let value_read_guard = value_write_guard.downgrade();
+    /// assert_eq!(*value_read_guard, 42);
+    ///
+    /// assert!(lock.try_write().is_none());
+    /// # }
+    /// ```
+    pub fn downgrade(self) -> MappedRwLockReadGuard<'a, T> {
+        // Prevent the original write guard from running its Drop implementation,
+        // which would release all permits. This must be done BEFORE any operation
+        // that might panic to ensure panic safety.
+        let guard = std::mem::ManuallyDrop::new(self);
+
+        // Release max_readers - 1 permits to convert the write lock to a read lock.
+        guard.s.release(guard.permits_acquired - 1);
+
+        // Create the mapped read guard with 1 permit (standard for read locks)
+        MappedRwLockReadGuard::new(guard.d, guard.s)
     }
 }

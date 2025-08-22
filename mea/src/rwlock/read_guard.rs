@@ -19,6 +19,7 @@ use std::ptr::NonNull;
 
 use crate::rwlock::MappedRwLockReadGuard;
 use crate::rwlock::RwLock;
+use crate::rwlock::RwLockWriteGuard;
 
 impl<T: ?Sized> RwLock<T> {
     /// Locks this `RwLock` with shared read access, causing the current task to yield until the
@@ -137,6 +138,18 @@ impl<T: ?Sized> Deref for RwLockReadGuard<'_, T> {
 }
 
 impl<'a, T: ?Sized> RwLockReadGuard<'a, T> {
+    /// Creates a new `RwLockReadGuard` by consuming a `RwLockWriteGuard`
+    /// during a downgrade operation.
+    ///
+    /// # Safety
+    /// This is the only safe way to construct a `RwLockReadGuard` without
+    /// acquiring a new semaphore permit, as it relies on the permit
+    /// already held by the `RwLockWriteGuard`.
+    pub(super) fn from_write_downgrade(write_guard: ManuallyDrop<RwLockWriteGuard<'a, T>>) -> Self {
+        Self {
+            lock: write_guard.lock,
+        }
+    }
     /// Makes a new [`MappedRwLockReadGuard`] for a component of the locked data.
     ///
     /// This operation cannot fail as the `RwLockReadGuard` passed in already locked the rwlock.
