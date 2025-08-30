@@ -353,13 +353,16 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockWriteGuard<T, U> {
     /// assert_eq!(*count_read_guard, 5);
     ///
     /// assert!(db.clone().try_write_owned().is_none());
+    ///
+    /// drop(count_read_guard);
+    /// assert!(db.clone().try_write_owned().is_some());
     /// # }
     /// ```
     pub fn downgrade(self) -> OwnedMappedRwLockReadGuard<T, U> {
         // Prevent the original write guard from running its Drop implementation,
         // which would release all permits. This must be done BEFORE any operation
         // that might panic to ensure panic safety.
-        let guard = std::mem::ManuallyDrop::new(self);
+        let guard = ManuallyDrop::new(self);
 
         // Release max_readers - 1 permits to convert the write lock to a read lock.
         guard.lock.s.release(guard.permits_acquired - 1);
@@ -368,7 +371,6 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockWriteGuard<T, U> {
         // We can safely move the `Arc` out of the guard, as the guard is not used after this.
         // This is a standard way to transfer ownership from a `ManuallyDrop` wrapper.
         let lock = unsafe { std::ptr::read(&guard.lock) };
-
         OwnedMappedRwLockReadGuard::new(guard.d, lock)
     }
 }

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::fmt;
+use std::mem::ManuallyDrop;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ptr::NonNull;
@@ -193,7 +194,7 @@ impl<T: ?Sized> OwnedRwLockWriteGuard<T> {
         // SAFETY: We have exclusive write access to the data through the rwlock.
         // The data pointer is valid for the lifetime of the guard.
         let d = NonNull::from(f(unsafe { &mut *orig.lock.c.get() }));
-        let orig = std::mem::ManuallyDrop::new(orig);
+        let orig = ManuallyDrop::new(orig);
 
         let permits_acquired = orig.permits_acquired;
         // SAFETY: The original guard is wrapped in `ManuallyDrop` and will not be dropped.
@@ -262,7 +263,7 @@ impl<T: ?Sized> OwnedRwLockWriteGuard<T> {
             None => return Err(orig),
         };
 
-        let orig = std::mem::ManuallyDrop::new(orig);
+        let orig = ManuallyDrop::new(orig);
 
         let permits_acquired = orig.permits_acquired;
         // SAFETY: The original guard is wrapped in `ManuallyDrop` and will not be dropped.
@@ -299,13 +300,16 @@ impl<T: ?Sized> OwnedRwLockWriteGuard<T> {
     /// assert_eq!(*read_guard, 42);
     ///
     /// assert!(lock.clone().try_write_owned().is_none());
+    ///
+    /// drop(read_guard);
+    /// assert!(lock.clone().try_write_owned().is_some());
     /// # }
     /// ```
     pub fn downgrade(self) -> OwnedRwLockReadGuard<T> {
         // Prevent the original write guard from running its Drop implementation,
         // which would release all permits. This must be done BEFORE any operation
         // that might panic to ensure panic safety.
-        let guard = std::mem::ManuallyDrop::new(self);
+        let guard = ManuallyDrop::new(self);
 
         // Release max_readers - 1 permits to convert the write lock to a read lock.
         // The remaining 1 permit is kept for the read lock.
@@ -315,7 +319,6 @@ impl<T: ?Sized> OwnedRwLockWriteGuard<T> {
         // We can safely move the `Arc` out of the guard, as the guard is not used after this.
         // This is a standard way to transfer ownership from a `ManuallyDrop` wrapper.
         let lock = unsafe { std::ptr::read(&guard.lock) };
-
         OwnedRwLockReadGuard { lock }
     }
 }

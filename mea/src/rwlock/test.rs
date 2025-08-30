@@ -124,9 +124,7 @@ async fn test_stress_concurrent_readers_writers() {
         let (reader_id, value) = handle.await.unwrap();
         assert!(
             (0..=10).contains(&value),
-            "Reader {} saw invalid value: {}",
-            reader_id,
-            value
+            "Reader {reader_id} saw invalid value: {value}"
         );
     }
 
@@ -136,10 +134,7 @@ async fn test_stress_concurrent_readers_writers() {
         assert_eq!(
             new_value,
             old_value + 1,
-            "Writer {} increment failed: {} -> {}",
-            writer_id,
-            old_value,
-            new_value
+            "Writer {writer_id} increment failed: {old_value} -> {new_value}"
         );
         writer_values.push((old_value, new_value));
     }
@@ -815,11 +810,7 @@ async fn test_downgrade_allows_concurrent_readers() {
 
     for handle in reader_handles {
         let (reader_id, value) = handle.await.unwrap();
-        assert_eq!(
-            value, 42,
-            "Reader {} should see the written value",
-            reader_id
-        );
+        assert_eq!(value, 42, "Reader {reader_id} should see the written value");
     }
 }
 #[tokio::test]
@@ -1019,7 +1010,7 @@ async fn test_downgrade_with_waiting_writers() {
         let (reader_id, value) = reader_task.await.unwrap();
         // The readers might see either value depending on exact timing,
         // so let's not make strict assertions here
-        println!("Reader {} saw value: {}", reader_id, value);
+        println!("Reader {reader_id} saw value: {value}");
     }
 
     let final_read = rwlock.read().await;

@@ -14,6 +14,7 @@
 
 use std::fmt;
 use std::marker::PhantomData;
+use std::mem::ManuallyDrop;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ptr::NonNull;
@@ -201,7 +202,7 @@ impl<'a, T: ?Sized> MappedRwLockWriteGuard<'a, T> {
         // access to the data through the rwlock, so dereferencing is safe.
         let d = NonNull::from(f(unsafe { orig.d.as_mut() }));
         let permits_acquired = orig.permits_acquired;
-        let orig = std::mem::ManuallyDrop::new(orig);
+        let orig = ManuallyDrop::new(orig);
         MappedRwLockWriteGuard::new(d, orig.s, permits_acquired)
     }
 
@@ -281,7 +282,7 @@ impl<'a, T: ?Sized> MappedRwLockWriteGuard<'a, T> {
             Some(d) => {
                 let d = NonNull::from(d);
                 let permits_acquired = orig.permits_acquired;
-                let orig = std::mem::ManuallyDrop::new(orig);
+                let orig = ManuallyDrop::new(orig);
                 Ok(MappedRwLockWriteGuard::new(d, orig.s, permits_acquired))
             }
             None => Err(orig),
@@ -325,13 +326,16 @@ impl<'a, T: ?Sized> MappedRwLockWriteGuard<'a, T> {
     /// assert_eq!(*value_read_guard, 42);
     ///
     /// assert!(lock.try_write().is_none());
+    ///
+    /// drop(value_read_guard);
+    /// assert!(lock.try_write().is_some());
     /// # }
     /// ```
     pub fn downgrade(self) -> MappedRwLockReadGuard<'a, T> {
         // Prevent the original write guard from running its Drop implementation,
         // which would release all permits. This must be done BEFORE any operation
         // that might panic to ensure panic safety.
-        let guard = std::mem::ManuallyDrop::new(self);
+        let guard = ManuallyDrop::new(self);
 
         // Release max_readers - 1 permits to convert the write lock to a read lock.
         guard.s.release(guard.permits_acquired - 1);

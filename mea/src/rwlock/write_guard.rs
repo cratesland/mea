@@ -271,18 +271,20 @@ impl<'a, T: ?Sized> RwLockWriteGuard<'a, T> {
     /// assert_eq!(*read_guard, 2);
     ///
     /// assert!(lock.try_write().is_none());
+    ///
+    /// drop(read_guard);
+    /// assert!(lock.try_write().is_some());
     /// # }
     /// ```
     pub fn downgrade(self) -> RwLockReadGuard<'a, T> {
         // Prevent the original write guard from running its Drop implementation,
         // which would release all permits. This must be done BEFORE any operation
         // that might panic to ensure panic safety.
-        let guard = std::mem::ManuallyDrop::new(self);
+        let guard = ManuallyDrop::new(self);
 
         // Release max_readers - 1 permits to convert the write lock to a read lock.
         // The remaining 1 permit is kept for the read lock.
         guard.lock.s.release(guard.permits_acquired - 1);
-
-        RwLockReadGuard::from_write_downgrade(guard)
+        RwLockReadGuard { lock: guard.lock }
     }
 }
