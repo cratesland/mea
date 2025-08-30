@@ -20,6 +20,7 @@ use std::ops::DerefMut;
 use std::ptr::NonNull;
 use std::sync::Arc;
 
+use crate::rwlock::OwnedMappedRwLockReadGuard;
 use crate::rwlock::RwLock;
 
 /// Owned RAII structure used to release the exclusive write access of a lock when dropped, for a
@@ -312,5 +313,64 @@ impl<T: ?Sized, U: ?Sized> OwnedMappedRwLockWriteGuard<T, U> {
             }
             None => Err(orig),
         }
+    }
+
+    /// Atomically downgrades the write lock to a read lock while preserving the mapping.
+    ///
+    /// This method changes the lock from exclusive mode to shared mode atomically,
+    /// preventing other writers from acquiring the lock in between.
+    ///
+    /// The returned `OwnedMappedRwLockReadGuard` preserves the original mapping and
+    /// has a `'static` lifetime.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use std::sync::Arc;
+    ///
+    /// use mea::rwlock::OwnedRwLockWriteGuard;
+    /// use mea::rwlock::RwLock;
+    ///
+    /// #[derive(Debug)]
+    /// struct Database {
+    ///     connection_count: u32,
+    ///     status: String,
+    /// }
+    ///
+    /// let db = Arc::new(RwLock::new(Database {
+    ///     connection_count: 0,
+    ///     status: "idle".to_owned(),
+    /// }));
+    ///
+    /// let write_guard = db.clone().write_owned().await;
+    /// let mut count_write_guard =
+    ///     OwnedRwLockWriteGuard::map(write_guard, |db| &mut db.connection_count);
+    /// *count_write_guard = 5;
+    ///
+    /// let count_read_guard = count_write_guard.downgrade();
+    /// assert_eq!(*count_read_guard, 5);
+    ///
+    /// assert!(db.clone().try_write_owned().is_none());
+    ///
+    /// drop(count_read_guard);
+    /// assert!(db.clone().try_write_owned().is_some());
+    /// # }
+    /// ```
+    pub fn downgrade(self) -> OwnedMappedRwLockReadGuard<T, U> {
+        // Prevent the original write guard from running its Drop implementation,
+        // which would release all permits. This must be done BEFORE any operation
+        // that might panic to ensure panic safety.
+        let guard = ManuallyDrop::new(self);
+
+        // Release max_readers - 1 permits to convert the write lock to a read lock.
+        guard.lock.s.release(guard.permits_acquired - 1);
+
+        // SAFETY: The `guard` is wrapped in `ManuallyDrop`, so its destructor will not be run.
+        // We can safely move the `Arc` out of the guard, as the guard is not used after this.
+        // This is a standard way to transfer ownership from a `ManuallyDrop` wrapper.
+        let lock = unsafe { std::ptr::read(&guard.lock) };
+        OwnedMappedRwLockReadGuard::new(guard.d, lock)
     }
 }

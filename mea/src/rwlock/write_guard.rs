@@ -20,6 +20,7 @@ use std::ptr::NonNull;
 
 use crate::rwlock::MappedRwLockWriteGuard;
 use crate::rwlock::RwLock;
+use crate::rwlock::RwLockReadGuard;
 
 impl<T: ?Sized> RwLock<T> {
     /// Locks this `RwLock` with exclusive write access, causing the current task to yield until the
@@ -243,5 +244,47 @@ impl<'a, T: ?Sized> RwLockWriteGuard<'a, T> {
             }
             None => Err(orig),
         }
+    }
+
+    /// Atomically downgrades the write lock to a read lock.
+    ///
+    /// This method changes the lock from exclusive mode to shared mode atomically,
+    /// preventing other writers from acquiring the lock in between.
+    ///
+    /// This is more efficient than dropping the write guard and acquiring a new read guard.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use std::sync::Arc;
+    ///
+    /// use mea::rwlock::RwLock;
+    ///
+    /// let lock = Arc::new(RwLock::new(1));
+    ///
+    /// let mut write_guard = lock.write().await;
+    /// *write_guard = 2;
+    ///
+    /// let read_guard = write_guard.downgrade();
+    /// assert_eq!(*read_guard, 2);
+    ///
+    /// assert!(lock.try_write().is_none());
+    ///
+    /// drop(read_guard);
+    /// assert!(lock.try_write().is_some());
+    /// # }
+    /// ```
+    pub fn downgrade(self) -> RwLockReadGuard<'a, T> {
+        // Prevent the original write guard from running its Drop implementation,
+        // which would release all permits. This must be done BEFORE any operation
+        // that might panic to ensure panic safety.
+        let guard = ManuallyDrop::new(self);
+
+        // Release max_readers - 1 permits to convert the write lock to a read lock.
+        // The remaining 1 permit is kept for the read lock.
+        guard.lock.s.release(guard.permits_acquired - 1);
+        RwLockReadGuard { lock: guard.lock }
     }
 }

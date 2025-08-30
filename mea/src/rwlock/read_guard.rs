@@ -105,7 +105,7 @@ impl<T: ?Sized> RwLock<T> {
 /// See the [module level documentation](crate::rwlock) for more.
 #[must_use = "if unused the RwLock will immediately unlock"]
 pub struct RwLockReadGuard<'a, T: ?Sized> {
-    lock: &'a RwLock<T>,
+    pub(super) lock: &'a RwLock<T>,
 }
 
 unsafe impl<T: ?Sized + Sync> Send for RwLockReadGuard<'_, T> {}
