@@ -18,10 +18,10 @@ resolver = "2"
 
 [workspace.package]
 edition = "2021"
-homepage = "https://github.com/cratesland/mea"
+homepage = "https://github.com/fast/mea"
 license = "Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/cratesland/mea"
+repository = "https://github.com/fast/mea"
 rust-version = "1.80.0"
 
 [workspace.lints.rust]
